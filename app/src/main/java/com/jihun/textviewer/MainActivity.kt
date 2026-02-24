@@ -180,6 +180,16 @@ private fun TextViewerApp(
             }
         },
     ) { paddingValues ->
+        val navigateToHome: () -> Unit = {
+            navController.navigate("home") {
+                popUpTo(navController.graph.findStartDestination().id) {
+                    saveState = true
+                }
+                launchSingleTop = true
+                restoreState = true
+            }
+        }
+
         NavHost(
             navController = navController,
             startDestination = "home",
@@ -192,6 +202,9 @@ private fun TextViewerApp(
                     onResumeClick = { viewModel.onAction(TextViewerAction.ResumeLastSession) },
                     onPreviousPage = { viewModel.onAction(TextViewerAction.PreviousPage) },
                     onNextPage = { viewModel.onAction(TextViewerAction.NextPage) },
+                    onGoToPage = { page ->
+                        viewModel.onAction(TextViewerAction.GoToPage(page))
+                    },
                 )
             }
             composable("history") {
@@ -204,6 +217,7 @@ private fun TextViewerApp(
                                 page = entry.currentPage,
                             ),
                         )
+                        navigateToHome()
                     },
                     onOpenNewFile = { filePickerLauncher.launch(arrayOf("text/plain", "text/*")) },
                 )

@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jihun.textviewer.BuildConfig
 import com.jihun.textviewer.domain.model.ReadingHistory
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
 import com.jihun.textviewer.ui.ReaderInteractionSurface
@@ -40,6 +41,7 @@ fun TextViewerHomeScreen(
     onResumeClick: () -> Unit,
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
+    onGoToPage: (Int) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (state.currentDocument != null) {
@@ -47,6 +49,7 @@ fun TextViewerHomeScreen(
                 state = state,
                 onPreviousPage = onPreviousPage,
                 onNextPage = onNextPage,
+                onGoToPage = onGoToPage,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -216,12 +219,41 @@ fun TextViewerSettingsScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(top = 8.dp),
                 )
+                Text(
+                    text = "현재 버전: v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
                 Button(
                     onClick = onToggleTheme,
                     modifier = Modifier.padding(top = 14.dp),
                 ) {
                     Text(if (darkTheme) "라이트 모드 사용" else "다크 모드 사용")
                 }
+            }
+        }
+
+        Surface(
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+            tonalElevation = 4.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Text(
+                    text = "릴리즈 노트",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "v${BuildConfig.VERSION_NAME}: 아이콘, 이어읽기 진입, 페이지 직접 이동 기능 반영",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Text(
+                    text = "v1.0.0: 텍스트 파일 읽기, 기록 저장, 기본 제스처 제어",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
             }
         }
     }
