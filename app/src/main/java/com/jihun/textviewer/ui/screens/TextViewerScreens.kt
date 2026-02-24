@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,14 +42,22 @@ fun TextViewerHomeScreen(
     onNextPage: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        ReaderInteractionSurface(
-            state = state,
-            onPreviousPage = onPreviousPage,
-            onNextPage = onNextPage,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-        )
+        if (state.currentDocument != null) {
+            ReaderInteractionSurface(
+                state = state,
+                onPreviousPage = onPreviousPage,
+                onNextPage = onNextPage,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            )
+        } else {
+            EmptyReaderHome(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+            )
+        }
 
         if (state.currentDocument == null) {
             Row(
@@ -91,6 +101,39 @@ fun TextViewerHomeScreen(
                         style = MaterialTheme.typography.bodyLarge,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyReaderHome(
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.Center)
+                .padding(horizontal = 10.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
+            shape = RoundedCornerShape(24.dp),
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "텍스트 파일을 선택해 읽기를 시작하세요",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    text = "TXT 열기 또는 이어읽기를 누르면 읽기 화면으로 진입합니다.",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
             }
         }
     }

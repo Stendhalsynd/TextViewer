@@ -23,9 +23,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -50,11 +52,11 @@ fun ReaderInteractionSurface(
     var dragOffset by remember { mutableStateOf(0f) }
     var containerHeightPx by remember { mutableStateOf(1f) }
     var centerZoneWidthPx by remember { mutableStateOf(1f) }
-    var screenBrightness by remember(activity) {
-        mutableStateOf(activity?.window?.attributes?.screenBrightness?.takeIf { it > 0f } ?: 1f)
+    var brightnessLevel by remember(activity) {
+        mutableFloatStateOf(readCurrentBrightness(activity))
     }
 
-    val sideGestureWidth = 52.dp
+    val sideGestureWidth = 64.dp
 
     Card(
         modifier = modifier,
@@ -120,19 +122,28 @@ fun ReaderInteractionSurface(
                                 }
                             }
                         }
-                        .pointerInput(activity, containerHeightPx, screenBrightness) {
+                        .pointerInput(activity, containerHeightPx) {
                             detectVerticalDragGestures(
                                 onVerticalDrag = { _, dragAmount ->
-                                    screenBrightness = adjustBrightness(
+                                    brightnessLevel = adjustBrightness(
                                         activity = activity,
-                                        current = screenBrightness,
+                                        current = brightnessLevel,
                                         dragAmount = dragAmount,
                                         heightPx = containerHeightPx,
                                     )
                                 },
                             )
                         },
-                )
+                ) {
+                    Text(
+                        text = "밝기",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .graphicsLayer { rotationZ = -90f },
+                    )
+                }
 
                 Box(
                     modifier = Modifier
@@ -186,19 +197,28 @@ fun ReaderInteractionSurface(
                                 }
                             }
                         }
-                        .pointerInput(activity, containerHeightPx, screenBrightness) {
+                        .pointerInput(activity, containerHeightPx) {
                             detectVerticalDragGestures(
                                 onVerticalDrag = { _, dragAmount ->
-                                    screenBrightness = adjustBrightness(
+                                    brightnessLevel = adjustBrightness(
                                         activity = activity,
-                                        current = screenBrightness,
+                                        current = brightnessLevel,
                                         dragAmount = dragAmount,
                                         heightPx = containerHeightPx,
                                     )
                                 },
                             )
                         },
-                )
+                ) {
+                    Text(
+                        text = "밝기",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .graphicsLayer { rotationZ = 90f },
+                    )
+                }
             }
         }
     }
@@ -210,7 +230,8 @@ private fun adjustBrightness(
     dragAmount: Float,
     heightPx: Float,
 ): Float {
-    val delta = -dragAmount / heightPx
+    val sensitivity = 1.6f
+    val delta = (-dragAmount / heightPx) * sensitivity
     val next = (current + delta).coerceIn(0.05f, 1f)
     if (activity != null) {
         val attributes = activity.window.attributes
@@ -218,6 +239,11 @@ private fun adjustBrightness(
         activity.window.attributes = attributes
     }
     return next
+}
+
+private fun readCurrentBrightness(activity: Activity?): Float {
+    val current = activity?.window?.attributes?.screenBrightness ?: -1f
+    return if (current in 0.01f..1f) current else 0.45f
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
