@@ -1,0 +1,14 @@
+[
+    {
+        "merged": "com.jihun.textviewer.app-merged_res-64:/drawable_ic_launcher_background.xml.flat",
+        "source": "com.jihun.textviewer.app-main-66:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "com.jihun.textviewer.app-merged_res-64:/xml_data_extraction_rules.xml.flat",
+        "source": "com.jihun.textviewer.app-main-66:/xml/data_extraction_rules.xml"
+    },
+    {
+        "merged": "com.jihun.textviewer.app-merged_res-64:/xml_backup_rules.xml.flat",
+        "source": "com.jihun.textviewer.app-main-66:/xml/backup_rules.xml"
+    }
+]
