@@ -12,14 +12,16 @@ object PaginationUtil {
         while (index < content.length) {
             val rawEnd = (index + pageCharLimit).coerceAtMost(content.length)
             var splitPoint = rawEnd
+            val splitRangeStart = index + 1
+            val splitRangeEnd = rawEnd
 
             if (rawEnd < content.length) {
                 val lineBreakPoint = content.lastIndexOf('\n', startIndex = rawEnd)
-                if (lineBreakPoint in (index + 1) until rawEnd) {
+                if (lineBreakPoint in splitRangeStart..splitRangeEnd) {
                     splitPoint = lineBreakPoint + 1
                 } else {
                     val whitespacePoint = content.lastIndexOf(' ', startIndex = rawEnd)
-                    if (whitespacePoint in (index + 1) until rawEnd) {
+                    if (whitespacePoint in splitRangeStart..splitRangeEnd) {
                         splitPoint = whitespacePoint + 1
                     }
                 }

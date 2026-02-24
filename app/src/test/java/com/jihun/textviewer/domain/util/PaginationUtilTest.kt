@@ -35,6 +35,25 @@ class PaginationUtilTest {
     }
 
     @Test
+    fun paginate_includesBoundaryWhitespaceOrLineBreakWithoutGap() {
+        val content = "ABCD\nEFGH"
+
+        val pages = PaginationUtil.paginate(content = content, pageCharLimit = 5)
+
+        assertEquals(listOf("ABCD\n", "EFGH"), pages)
+        assertEquals(content, pages.joinToString(""))
+    }
+
+    @Test
+    fun paginate_doesNotCreateOverlappingOrLostPages() {
+        val content = "alpha beta gamma delta epsilon zeta"
+        val pages = PaginationUtil.paginate(content = content, pageCharLimit = 7)
+
+        assertEquals(content, pages.joinToString(""))
+        assertTrue(pages.all { it.isNotEmpty() })
+    }
+
+    @Test
     fun clampPage_boundsToAvailablePages() {
         assertEquals(0, PaginationUtil.clampPage(requestedPage = -5, totalPages = 4))
         assertEquals(2, PaginationUtil.clampPage(requestedPage = 2, totalPages = 4))

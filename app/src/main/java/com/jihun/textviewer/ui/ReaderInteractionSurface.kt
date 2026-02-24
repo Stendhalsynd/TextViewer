@@ -11,6 +11,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -60,7 +62,6 @@ import androidx.compose.ui.zIndex
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
-import androidx.compose.animation.core.animateFloatAsState
 
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
@@ -76,12 +77,11 @@ fun ReaderInteractionSurface(
     val activity = remember(context) { context.findActivity() }
     val totalPages = state.totalPages.coerceAtLeast(1)
     val pageNumber = (state.currentPage + 1).coerceAtLeast(1)
+    val pageContentScrollState = rememberScrollState()
 
     var jumpPageText by remember { mutableStateOf(TextFieldValue(pageNumber.toString())) }
     var showJumpPanel by remember { mutableStateOf(false) }
-    var dragOffset by remember { mutableStateOf(0f) }
     var containerHeightPx by remember { mutableStateOf(1f) }
-    var centerZoneWidthPx by remember { mutableStateOf(1f) }
     var brightnessLevel by remember(activity) {
         mutableFloatStateOf(readCurrentBrightness(activity))
     }
@@ -108,6 +108,10 @@ fun ReaderInteractionSurface(
         }
     }
 
+    LaunchedEffect(state.currentPage, state.currentDocument?.uri) {
+        pageContentScrollState.scrollTo(0)
+    }
+
     val jumpToPage = {
         val target = jumpPage
         if (target != null) {
@@ -129,14 +133,10 @@ fun ReaderInteractionSurface(
                     containerHeightPx = size.height.toFloat().coerceAtLeast(1f)
                 },
         ) {
-            val dragThresholdPx = containerHeightPx * 0.22f
-            val animatedOffset by animateFloatAsState(targetValue = dragOffset, label = "reader-page-offset")
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 18.dp, vertical = 14.dp)
-                    .graphicsLayer { translationY = animatedOffset },
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
@@ -149,19 +149,24 @@ fun ReaderInteractionSurface(
                 )
                 if (state.currentDocument == null) {
                     Text(
-                        text = "하단 절반 좌/우 터치, 중앙 상하 드래그, 볼륨 키로 이동",
+                        text = "하단 절반 좌/우 터치, 볼륨 키로 이동",
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }
-                Text(
-                    text = state.pageContent.ifBlank {
-                        "TXT 파일을 열면 이 영역에서 읽을 수 있습니다."
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 6.dp),
-                )
+                        .weight(1f)
+                        .padding(top = 6.dp)
+                        .verticalScroll(pageContentScrollState),
+                ) {
+                    Text(
+                        text = state.pageContent.ifBlank {
+                            "TXT 파일을 열면 이 영역에서 읽을 수 있습니다."
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
             }
 
             androidx.compose.animation.AnimatedVisibility(
@@ -254,7 +259,7 @@ fun ReaderInteractionSurface(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = 8.dp, end = 10.dp)
+                        .padding(top = 12.dp, end = 20.dp)
                         .zIndex(25f)
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
                         .pointerInput(Unit) {
@@ -294,9 +299,9 @@ fun ReaderInteractionSurface(
 
             if (!showJumpPanel) {
                 Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
                 ) {
                     Box(
                         modifier = Modifier
@@ -335,42 +340,7 @@ fun ReaderInteractionSurface(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight()
-                            .onSizeChanged { size ->
-                                centerZoneWidthPx = size.width.toFloat().coerceAtLeast(1f)
-                            }
-                            .pointerInput(onPreviousPage, onNextPage, containerHeightPx, centerZoneWidthPx) {
-                                detectTapGestures { offset ->
-                                    val isBottomHalf = offset.y >= (containerHeightPx * 0.5f)
-                                    if (!isBottomHalf) return@detectTapGestures
-
-                                    if (offset.x < centerZoneWidthPx * 0.5f) {
-                                        onPreviousPage()
-                                    } else {
-                                        onNextPage()
-                                    }
-                                }
-                            }
-                            .pointerInput(onPreviousPage, onNextPage, dragThresholdPx, containerHeightPx) {
-                                detectVerticalDragGestures(
-                                    onVerticalDrag = { _, dragAmount ->
-                                        dragOffset = (dragOffset + dragAmount).coerceIn(-containerHeightPx, containerHeightPx)
-                                        when {
-                                            dragOffset <= -dragThresholdPx -> {
-                                                onNextPage()
-                                                dragOffset = 0f
-                                            }
-
-                                            dragOffset >= dragThresholdPx -> {
-                                                onPreviousPage()
-                                                dragOffset = 0f
-                                            }
-                                        }
-                                    },
-                                    onDragEnd = { dragOffset = 0f },
-                                    onDragCancel = { dragOffset = 0f },
-                                )
-                            },
+                            .fillMaxHeight(),
                     )
 
                     Box(
