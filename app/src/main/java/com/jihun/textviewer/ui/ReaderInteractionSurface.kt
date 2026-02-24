@@ -49,6 +49,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -58,6 +59,7 @@ import com.jihun.textviewer.domain.viewmodel.TextViewerState
 import androidx.compose.animation.core.animateFloatAsState
 
 @Composable
+@OptIn(ExperimentalComposeUiApi::class)
 fun ReaderInteractionSurface(
     state: TextViewerState,
     onPreviousPage: () -> Unit,
@@ -159,7 +161,7 @@ fun ReaderInteractionSurface(
                 )
             }
 
-            AnimatedVisibility(
+            androidx.compose.animation.AnimatedVisibility(
                 visible = showJumpPanel && state.currentDocument != null,
                 enter = fadeIn() + scaleIn(initialScale = 0.96f),
                 exit = fadeOut() + scaleOut(targetScale = 0.96f),
