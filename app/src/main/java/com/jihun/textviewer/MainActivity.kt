@@ -205,6 +205,7 @@ private fun TextViewerApp(
                     onGoToPage = { page ->
                         viewModel.onAction(TextViewerAction.GoToPage(page))
                     },
+                    onToggleTheme = onToggleTheme,
                 )
             }
             composable("history") {

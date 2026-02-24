@@ -69,6 +69,7 @@ fun ReaderInteractionSurface(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onGoToPage: (Int) -> Unit,
+    onToggleTheme: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -250,6 +251,25 @@ fun ReaderInteractionSurface(
             )
 
             if (state.currentDocument != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 8.dp, end = 10.dp)
+                        .zIndex(25f)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
+                        .pointerInput(Unit) {
+                            detectTapGestures {
+                                onToggleTheme()
+                            }
+                        },
+                ) {
+                    Text(
+                        text = "$pageNumber / $totalPages",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+                    )
+                }
+
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
