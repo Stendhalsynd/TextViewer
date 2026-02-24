@@ -39,9 +39,23 @@ class TextViewerViewModel(
             )
             TextViewerAction.LoadHistory -> loadHistory()
             TextViewerAction.ResumeLastSession -> resumeLastSession()
+            TextViewerAction.CloseDocument -> closeDocument()
             is TextViewerAction.GoToPage -> setPage(action.page)
             TextViewerAction.NextPage -> setPage(_state.value.currentPage + 1)
             TextViewerAction.PreviousPage -> setPage(_state.value.currentPage - 1)
+        }
+    }
+
+    private fun closeDocument() {
+        _state.update {
+            it.copy(
+                isLoading = false,
+                currentDocument = null,
+                currentPage = 0,
+                pageContent = "",
+                totalPages = 0,
+                errorMessage = null,
+            )
         }
     }
 

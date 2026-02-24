@@ -113,6 +113,13 @@ fun ReaderInteractionSurface(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(sideGestureWidth)
+                        .pointerInput(onPreviousPage, containerHeightPx) {
+                            detectTapGestures { offset ->
+                                if (offset.y >= (containerHeightPx * 0.5f)) {
+                                    onPreviousPage()
+                                }
+                            }
+                        }
                         .pointerInput(activity, containerHeightPx, screenBrightness) {
                             detectVerticalDragGestures(
                                 onVerticalDrag = { _, dragAmount ->
@@ -172,6 +179,13 @@ fun ReaderInteractionSurface(
                     modifier = Modifier
                         .fillMaxHeight()
                         .width(sideGestureWidth)
+                        .pointerInput(onNextPage, containerHeightPx) {
+                            detectTapGestures { offset ->
+                                if (offset.y >= (containerHeightPx * 0.5f)) {
+                                    onNextPage()
+                                }
+                            }
+                        }
                         .pointerInput(activity, containerHeightPx, screenBrightness) {
                             detectVerticalDragGestures(
                                 onVerticalDrag = { _, dragAmount ->

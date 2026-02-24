@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -114,7 +115,8 @@ private fun TextViewerApp(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
     val currentRoute = currentDestination?.route
-    val showBottomBar = !(currentRoute == "home" && state.currentDocument != null)
+    val isReading = currentRoute == "home" && state.currentDocument != null
+    val showBottomBar = !isReading
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -141,11 +143,20 @@ private fun TextViewerApp(
         viewModel.onAction(TextViewerAction.LoadHistory)
         viewModel.effect.collect { effect ->
             val message = when (effect) {
-                TextViewerEffect.FileOpened -> "File opened"
-                TextViewerEffect.Resumed -> "Resumed from history"
+                TextViewerEffect.FileOpened ->
+                    "하단 절반 좌/우 터치: 페이지 이동 · 좌/우 끝 상하 드래그: 밝기 · 뒤로가기: 홈"
+                TextViewerEffect.Resumed ->
+                    "이어읽기 복원 완료 · 뒤로가기: 홈 · 좌/우 끝 상하 드래그: 밝기"
                 is TextViewerEffect.ShowError -> effect.message
             }
             scope.launch { snackbarHostState.showSnackbar(message) }
+        }
+    }
+
+    BackHandler(enabled = isReading) {
+        viewModel.onAction(TextViewerAction.CloseDocument)
+        scope.launch {
+            snackbarHostState.showSnackbar("홈 화면으로 돌아왔습니다")
         }
     }
 

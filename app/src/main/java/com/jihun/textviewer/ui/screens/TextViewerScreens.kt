@@ -49,23 +49,25 @@ fun TextViewerHomeScreen(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         )
 
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 10.dp)
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            GlassActionChip(
-                text = "TXT 열기",
-                onClick = onOpenFileClick,
-                modifier = Modifier.weight(1f),
-            )
-            GlassActionChip(
-                text = "이어읽기",
-                onClick = onResumeClick,
-                modifier = Modifier.weight(1f),
-            )
+        if (state.currentDocument == null) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp)
+                    .padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                GlassActionChip(
+                    text = "TXT 열기",
+                    onClick = onOpenFileClick,
+                    modifier = Modifier.weight(1f),
+                )
+                GlassActionChip(
+                    text = "이어읽기",
+                    onClick = onResumeClick,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
 
         if (state.isLoading) {

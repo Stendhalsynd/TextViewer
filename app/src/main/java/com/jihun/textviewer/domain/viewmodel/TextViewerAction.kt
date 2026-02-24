@@ -7,6 +7,7 @@ sealed interface TextViewerAction {
     data class OpenHistoryEntry(val fileUri: String, val page: Int) : TextViewerAction
     data object LoadHistory : TextViewerAction
     data object ResumeLastSession : TextViewerAction
+    data object CloseDocument : TextViewerAction
     data class GoToPage(val page: Int) : TextViewerAction
     data object NextPage : TextViewerAction
     data object PreviousPage : TextViewerAction
