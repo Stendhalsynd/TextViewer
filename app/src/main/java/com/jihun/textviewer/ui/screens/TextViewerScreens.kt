@@ -245,7 +245,7 @@ fun TextViewerSettingsScreen(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "v${BuildConfig.VERSION_NAME}: 아이콘, 이어읽기 진입, 페이지 직접 이동 기능 반영",
+                    text = "v${BuildConfig.VERSION_NAME}: 페이지 이동 패널 버튼/입력 터치 동작 정리",
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(top = 8.dp),
                 )
