@@ -10,16 +10,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.material3.BottomAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -36,7 +29,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -51,6 +43,8 @@ import com.jihun.textviewer.domain.repository.TextFileRepository
 import com.jihun.textviewer.domain.viewmodel.TextViewerAction
 import com.jihun.textviewer.domain.viewmodel.TextViewerEffect
 import com.jihun.textviewer.domain.viewmodel.TextViewerViewModel
+import com.jihun.textviewer.ui.components.LiquidDestination
+import com.jihun.textviewer.ui.components.LiquidGlassBottomBar
 import com.jihun.textviewer.ui.screens.TextViewerHistoryScreen
 import com.jihun.textviewer.ui.screens.TextViewerHomeScreen
 import com.jihun.textviewer.ui.screens.TextViewerSettingsScreen
@@ -85,12 +79,10 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class TopLevelDestination(val route: String, val label: String)
-
 private val destinations = listOf(
-    TopLevelDestination("home", "Home"),
-    TopLevelDestination("history", "History"),
-    TopLevelDestination("settings", "Settings"),
+    LiquidDestination("home", "Home"),
+    LiquidDestination("history", "History"),
+    LiquidDestination("settings", "Settings"),
 )
 
 @Composable
@@ -108,7 +100,6 @@ private fun TextViewerRoot(
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 private fun TextViewerApp(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit,
@@ -122,6 +113,8 @@ private fun TextViewerApp(
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val currentRoute = currentDestination?.route
+    val showBottomBar = !(currentRoute == "home" && state.currentDocument != null)
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -157,39 +150,22 @@ private fun TextViewerApp(
     }
 
     Scaffold(
-        modifier = Modifier.safeDrawingPadding(),
-        topBar = {
-            TopAppBar(
-                title = { Text("TextViewer") },
-                actions = {
-                    TextButton(onClick = onToggleTheme) {
-                        Text(if (darkTheme) "Day mode" else "Night mode")
-                    }
-                },
-            )
-        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            BottomAppBar {
-                destinations.forEach { destination ->
-                    val selected = currentDestination
-                        ?.hierarchy
-                        ?.any { it.route == destination.route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+            if (showBottomBar) {
+                LiquidGlassBottomBar(
+                    destinations = destinations,
+                    currentRoute = currentRoute,
+                    onNavigate = { route ->
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
                             }
-                        },
-                        icon = {},
-                        label = { Text(destination.label) },
-                    )
-                }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
         },
     ) { paddingValues ->
@@ -205,7 +181,6 @@ private fun TextViewerApp(
                     onResumeClick = { viewModel.onAction(TextViewerAction.ResumeLastSession) },
                     onPreviousPage = { viewModel.onAction(TextViewerAction.PreviousPage) },
                     onNextPage = { viewModel.onAction(TextViewerAction.NextPage) },
-                    onToggleTheme = onToggleTheme,
                 )
             }
             composable("history") {
