@@ -9,10 +9,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,6 +54,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
 import androidx.compose.animation.core.animateFloatAsState
 
@@ -86,8 +86,6 @@ fun ReaderInteractionSurface(
     val jumpEnabled = jumpPage != null && jumpPage in 1..totalPages
     val jumpPageFocus = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    val jumpToggleSource = remember { MutableInteractionSource() }
-
     val sideGestureWidth = 64.dp
 
     LaunchedEffect(state.currentPage, totalPages, showJumpPanel) {
@@ -241,23 +239,18 @@ fun ReaderInteractionSurface(
                         .height(24.dp)
                         .width(88.dp)
                         .zIndex(3f)
+                        .semantics { contentDescription = "페이지 이동" }
                         .background(
                             MaterialTheme.colorScheme.surface.copy(alpha = 0.001f),
                             shape = CircleShape,
                         )
-                        .clickable(
-                            interactionSource = jumpToggleSource,
-                            indication = null,
-                        ) {
-                            showJumpPanel = true
+                        .pointerInput(Unit) {
+                            detectTapGestures {
+                                showJumpPanel = true
+                            }
                         },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = "페이지 이동",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
-                    )
                 }
             }
 
