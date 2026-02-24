@@ -55,6 +55,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
 import androidx.compose.animation.core.animateFloatAsState
 
@@ -239,6 +240,7 @@ fun ReaderInteractionSurface(
                         .padding(top = 6.dp)
                         .height(24.dp)
                         .width(88.dp)
+                        .zIndex(3f)
                         .background(
                             MaterialTheme.colorScheme.surface.copy(alpha = 0.001f),
                             shape = CircleShape,
@@ -254,7 +256,7 @@ fun ReaderInteractionSurface(
                     Text(
                         text = "페이지 이동",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.54f),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
                     )
                 }
             }
