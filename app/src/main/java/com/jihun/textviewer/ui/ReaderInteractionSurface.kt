@@ -230,31 +230,31 @@ fun ReaderInteractionSurface(
                 }
             }
 
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 6.dp)
-                    .height(24.dp)
-                    .width(88.dp)
-                    .background(
-                        MaterialTheme.colorScheme.surface.copy(alpha = 0.001f),
-                        shape = CircleShape,
-                    )
-                    .clickable(
-                        interactionSource = jumpToggleSource,
-                        indication = null,
-                    ) {
-                        if (state.currentDocument != null) {
+            if (state.currentDocument != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 6.dp)
+                        .height(24.dp)
+                        .width(88.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.001f),
+                            shape = CircleShape,
+                        )
+                        .clickable(
+                            interactionSource = jumpToggleSource,
+                            indication = null,
+                        ) {
                             showJumpPanel = true
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "페이지 이동",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.54f),
-                )
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "페이지 이동",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.54f),
+                    )
+                }
             }
 
             Row(
