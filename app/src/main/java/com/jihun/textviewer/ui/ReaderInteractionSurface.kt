@@ -30,6 +30,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -170,18 +171,12 @@ fun ReaderInteractionSurface(
                     modifier = Modifier
                         .matchParentSize()
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f))
-                        .pointerInput(Unit) {
-                            detectTapGestures { showJumpPanel = false }
-                        },
                 ) {
                     Card(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .padding(top = 52.dp)
-                            .width(300.dp)
-                            .pointerInput(Unit) {
-                                detectTapGestures(onTap = {})
-                            },
+                            .width(300.dp),
                         shape = RoundedCornerShape(18.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
@@ -191,10 +186,19 @@ fun ReaderInteractionSurface(
                                 .padding(horizontal = 14.dp, vertical = 12.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Text(
-                                text = "페이지 이동",
-                                style = MaterialTheme.typography.titleSmall,
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "페이지 이동",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                TextButton(onClick = { showJumpPanel = false }) {
+                                    Text("닫기")
+                                }
+                            }
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
