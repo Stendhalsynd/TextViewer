@@ -6,13 +6,14 @@ plugins {
 android {
     namespace = "com.jihun.textviewer"
     compileSdk = 34
+    val debugKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
 
     defaultConfig {
         applicationId = "com.jihun.textviewer"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -20,9 +21,23 @@ android {
         }
     }
 
+    if (debugKeystore.exists()) {
+        signingConfigs {
+            create("releaseSigned") {
+                storeFile = debugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (debugKeystore.exists()) {
+                signingConfig = signingConfigs.getByName("releaseSigned")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
