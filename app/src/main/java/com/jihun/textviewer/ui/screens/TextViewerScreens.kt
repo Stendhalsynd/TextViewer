@@ -247,7 +247,7 @@ fun TextViewerSettingsScreen(
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "v${BuildConfig.VERSION_NAME}: 페이지 이동 패널 버튼/입력 터치 동작 정리",
+                    text = "v${BuildConfig.VERSION_NAME}: 페이지 카운터 표시 및 화면 상단 테마 토글 추가",
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(top = 8.dp),
                 )
