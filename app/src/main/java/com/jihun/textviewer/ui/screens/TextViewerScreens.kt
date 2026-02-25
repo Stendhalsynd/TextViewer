@@ -106,7 +106,7 @@ fun TextViewerHomeScreen(
             }
         }
 
-        if (state.isLoading) {
+        if (state.isLoading && state.errorMessage == null) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)

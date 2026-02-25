@@ -132,7 +132,7 @@ class TextViewerViewModel(
                     }
                 }
                 .onFailure { throwable ->
-                    val message = throwable.message?.ifBlank { "Failed to open file" } ?: "Failed to open file"
+                    val message = formatOpenFileError(throwable)
                     _state.update {
                         it.copy(
                             isLoading = false,
@@ -146,6 +146,29 @@ class TextViewerViewModel(
                     }
                     _effect.emit(TextViewerEffect.ShowError(message))
                 }
+        }
+    }
+
+    private fun formatOpenFileError(throwable: Throwable): String {
+        val source = throwable.message?.trim().orEmpty()
+        return when {
+            source.contains("Read permission denied") ->
+                "파일 읽기 권한이 없습니다. 파일 앱에서 다시 선택해 주세요."
+            source.contains("Input stream is unavailable") ->
+                "선택한 파일의 접근이 불가능합니다. 다른 파일 또는 다시 선택해 주세요."
+            source.contains("Timed out while reading file") ->
+                "파일 읽기 시간이 초과되었습니다. 네트워크/용량이 큰 파일은 잠시 뒤 다시 시도해 주세요."
+            source.contains("파일이 너무 큽니다") ->
+                "텍스트 파일 용량이 커서 읽지 못했습니다. 용량이 작은 파일로 다시 시도해 주세요."
+            source.contains("지원되지 않는 파일 형식") ->
+                "텍스트 파일이 아니거나 지원되지 않는 형식입니다."
+            source.contains("바이너리 데이터로 감지") ->
+                "바이너리 파일로 판단되어 읽기에서 제외되었습니다."
+            source.contains("Failed to open text file") ->
+                "파일 열기에 실패했습니다."
+            source.isBlank() ->
+                "텍스트 파일을 여는 중 알 수 없는 오류가 발생했습니다."
+            else -> source
         }
     }
 

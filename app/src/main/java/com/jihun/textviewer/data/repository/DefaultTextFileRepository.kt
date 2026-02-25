@@ -13,15 +13,23 @@ class DefaultTextFileRepository(
 ) : TextFileRepository {
 
     override suspend fun loadTextFile(uri: Uri): Result<TextDocument> {
-        val fileName = loader.getDisplayName(uri) ?: uri.lastPathSegment
+        val fileName = loader.getDisplayNameWithTimeout(uri) ?: uri.lastPathSegment
         val mimeType = loader.getMimeType(uri)
-        if (!TextFileValidator.isTxtFile(uri, fileName, mimeType)) {
+
+        if (!TextFileValidator.shouldAllowFallbackLoad(uri, fileName, mimeType)) {
             return Result.failure(
-                IllegalArgumentException("지원되지 않는 파일 형식입니다. TXT/텍스트 파일만 열 수 있습니다."),
+                IllegalArgumentException(
+                    "지원되지 않는 파일 형식입니다. TXT/텍스트 파일만 열 수 있습니다.\n" +
+                        "URI: $uri\n" +
+                        "MIME: ${mimeType ?: "확인 안 됨"}",
+                ),
             )
         }
 
-        return loader.loadText(uri).map { content ->
+        return loader.loadText(uri).mapCatching { content ->
+            if (content.contains('\u0000')) {
+                throw IllegalArgumentException("바이너리 데이터로 감지된 파일은 열 수 없습니다: $uri")
+            }
             TextDocument(
                 uri = uri.toString(),
                 fileName = fileName,
@@ -34,7 +42,7 @@ class DefaultTextFileRepository(
     override fun isTxtFile(uri: Uri): Boolean {
         val fileName = loader.getDisplayName(uri) ?: uri.lastPathSegment
         val mimeType = loader.getMimeType(uri)
-        return TextFileValidator.isTxtFile(uri, fileName, mimeType)
+        return TextFileValidator.shouldAllowFallbackLoad(uri, fileName, mimeType)
     }
 
     companion object {
