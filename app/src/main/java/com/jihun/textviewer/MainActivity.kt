@@ -205,8 +205,15 @@ private fun TextViewerApp(
                     onGoToPage = { page ->
                         viewModel.onAction(TextViewerAction.GoToPage(page))
                     },
-                    onSetTotalPages = { _ -> },
                     onToggleTheme = onToggleTheme,
+                    onPageRangesUpdated = { documentUri, ranges ->
+                        viewModel.onAction(
+                            TextViewerAction.SetPageRanges(
+                                documentUri = documentUri,
+                                ranges = ranges,
+                            ),
+                        )
+                    },
                 )
             }
             composable("history") {
@@ -219,6 +226,7 @@ private fun TextViewerApp(
                                 page = entry.currentPage,
                                 totalPages = entry.totalPages,
                                 pageSize = entry.pageSize,
+                                currentOffset = entry.currentOffset,
                             ),
                         )
                         navigateToHome()

@@ -4,6 +4,7 @@ data class ReadingHistory(
     val fileUri: String,
     val fileName: String?,
     val currentPage: Int,
+    val currentOffset: Int,
     val pageSize: Int,
     val totalPages: Int,
     val updatedAtMillis: Long,

@@ -4,12 +4,10 @@ import android.net.Uri
 import com.jihun.textviewer.data.source.SafTextFileLoader
 import com.jihun.textviewer.domain.model.TextDocument
 import com.jihun.textviewer.domain.repository.TextFileRepository
-import com.jihun.textviewer.domain.util.PaginationUtil
 import com.jihun.textviewer.domain.util.TextFileValidator
 
 class DefaultTextFileRepository(
     private val loader: SafTextFileLoader,
-    private val pageCharLimit: Int = DEFAULT_PAGE_CHAR_LIMIT,
 ) : TextFileRepository {
 
     override suspend fun loadTextFile(uri: Uri): Result<TextDocument> {
@@ -34,7 +32,6 @@ class DefaultTextFileRepository(
                 uri = uri.toString(),
                 fileName = fileName,
                 content = content,
-                pages = PaginationUtil.paginate(content = content, pageCharLimit = pageCharLimit),
             )
         }
     }
@@ -43,9 +40,5 @@ class DefaultTextFileRepository(
         val fileName = loader.getDisplayName(uri) ?: uri.lastPathSegment
         val mimeType = loader.getMimeType(uri)
         return TextFileValidator.shouldAllowFallbackLoad(uri, fileName, mimeType)
-    }
-
-    companion object {
-        const val DEFAULT_PAGE_CHAR_LIMIT: Int = 1800
     }
 }

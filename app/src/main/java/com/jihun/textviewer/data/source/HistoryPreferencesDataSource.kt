@@ -52,6 +52,7 @@ class HistoryPreferencesDataSource(
                 fileUri = json.getString("fileUri"),
                 fileName = if (json.isNull("fileName")) null else json.getString("fileName"),
                 currentPage = json.optInt("currentPage", 0),
+                currentOffset = json.optInt("currentOffset", -1),
                 pageSize = json.optInt("pageSize", 0),
                 totalPages = json.optInt("totalPages", 0),
                 updatedAtMillis = json.optLong("updatedAtMillis", 0L),
@@ -63,6 +64,7 @@ class HistoryPreferencesDataSource(
         put("fileUri", fileUri)
         put("fileName", fileName)
         put("currentPage", currentPage)
+        put("currentOffset", currentOffset)
         put("pageSize", pageSize)
         put("totalPages", totalPages)
         put("updatedAtMillis", updatedAtMillis)

@@ -42,8 +42,8 @@ fun TextViewerHomeScreen(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onGoToPage: (Int) -> Unit,
-    onSetTotalPages: (Int) -> Unit,
     onToggleTheme: () -> Unit,
+    onPageRangesUpdated: (String, List<com.jihun.textviewer.domain.model.TextPageRange>) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (state.currentDocument != null) {
@@ -52,8 +52,8 @@ fun TextViewerHomeScreen(
                 onPreviousPage = onPreviousPage,
                 onNextPage = onNextPage,
                 onGoToPage = onGoToPage,
-                onSetTotalPages = onSetTotalPages,
                 onToggleTheme = onToggleTheme,
+                onPageRangesUpdated = onPageRangesUpdated,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 10.dp, vertical = 8.dp),

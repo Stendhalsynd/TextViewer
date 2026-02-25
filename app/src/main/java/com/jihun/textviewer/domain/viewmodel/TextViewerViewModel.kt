@@ -5,9 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jihun.textviewer.domain.model.ReadingHistory
 import com.jihun.textviewer.domain.model.TextDocument
+import com.jihun.textviewer.domain.model.TextPageRange
 import com.jihun.textviewer.domain.repository.ReadingHistoryRepository
 import com.jihun.textviewer.domain.repository.TextFileRepository
-import com.jihun.textviewer.domain.util.PaginationUtil
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -22,18 +22,22 @@ class TextViewerViewModel(
     private val historyRepository: ReadingHistoryRepository,
     private val pageCharLimit: Int = DEFAULT_PAGE_CHAR_LIMIT,
 ) : ViewModel() {
-
     private val _state = MutableStateFlow(TextViewerState())
     val state: StateFlow<TextViewerState> = _state.asStateFlow()
 
     private val _effect = MutableSharedFlow<TextViewerEffect>()
     val effect: SharedFlow<TextViewerEffect> = _effect.asSharedFlow()
 
+    private var pendingRestoreOffset: Int? = null
+
     fun onAction(action: TextViewerAction) {
         when (action) {
             is TextViewerAction.OpenFile -> openFile(
                 uri = action.uri,
                 preferredPage = null,
+                previousPageCount = null,
+                previousPageSize = null,
+                preferredOffset = null,
                 emitResumed = false,
             )
             is TextViewerAction.OpenHistoryEntry -> openFile(
@@ -41,27 +45,33 @@ class TextViewerViewModel(
                 preferredPage = action.page,
                 previousPageCount = action.totalPages,
                 previousPageSize = action.pageSize,
+                preferredOffset = action.currentOffset.takeIf { it >= 0 },
                 emitResumed = true,
             )
             TextViewerAction.LoadHistory -> loadHistory()
             TextViewerAction.ResumeLastSession -> resumeLastSession()
             TextViewerAction.CloseDocument -> closeDocument()
+            is TextViewerAction.SetPageRanges -> applyPageRanges(
+                documentUri = action.documentUri,
+                ranges = action.ranges,
+            )
             is TextViewerAction.GoToPage -> setPage(action.page)
-            is TextViewerAction.SetVisualPageCount -> setVisualTotalPages(action.totalPages)
-            TextViewerAction.NextPage -> setPage(_state.value.currentPage + 1)
-            TextViewerAction.PreviousPage -> setPage(_state.value.currentPage - 1)
+            TextViewerAction.NextPage -> movePage(1)
+            TextViewerAction.PreviousPage -> movePage(-1)
         }
     }
 
     private fun closeDocument() {
+        pendingRestoreOffset = null
         _state.update {
             it.copy(
                 isLoading = false,
                 currentDocument = null,
                 currentPage = 0,
+                currentOffset = 0,
+                pageRanges = emptyList(),
                 pageContent = "",
                 totalPages = 0,
-                pendingRestoreRatio = null,
                 errorMessage = null,
             )
         }
@@ -72,6 +82,7 @@ class TextViewerViewModel(
         preferredPage: Int?,
         previousPageCount: Int? = null,
         previousPageSize: Int? = null,
+        preferredOffset: Int? = null,
         emitResumed: Boolean,
     ) {
         viewModelScope.launch {
@@ -86,9 +97,10 @@ class TextViewerViewModel(
                                 isLoading = false,
                                 currentDocument = null,
                                 currentPage = 0,
+                                currentOffset = 0,
+                                pageRanges = emptyList(),
                                 pageContent = "",
                                 totalPages = 0,
-                                pendingRestoreRatio = null,
                                 errorMessage = message,
                             )
                         }
@@ -96,32 +108,27 @@ class TextViewerViewModel(
                         return@onSuccess
                     }
 
-                    val restoreRatio = ResumeProgressCalculator.computeRestoreRatio(
+                    val initialOffset = resolveRestoreOffset(
+                        contentLength = document.content.length,
+                        preferredOffset = preferredOffset,
                         preferredPage = preferredPage,
                         previousPageCount = previousPageCount,
                         previousPageSize = previousPageSize,
                     )
-                    val initialPage = if (restoreRatio == null) {
-                        PaginationUtil.clampPage(preferredPage ?: 0, document.totalPages)
-                    } else {
-                        ResumeProgressCalculator.resolvePageFromRatio(
-                            ratio = restoreRatio,
-                            totalPages = document.totalPages,
-                        )
-                    }
+                    pendingRestoreOffset = initialOffset
 
                     _state.update {
                         it.copy(
                             isLoading = false,
                             currentDocument = document,
-                            currentPage = initialPage,
-                            pageContent = document.pages.getOrElse(initialPage) { "" },
-                            totalPages = document.totalPages,
-                            pendingRestoreRatio = null,
+                            currentPage = 0,
+                            currentOffset = 0,
+                            pageRanges = emptyList(),
+                            pageContent = "",
+                            totalPages = 0,
                             errorMessage = null,
                         )
                     }
-                    persistCurrentProgress(document, initialPage)
 
                     if (emitResumed) {
                         _effect.emit(TextViewerEffect.Resumed)
@@ -136,15 +143,162 @@ class TextViewerViewModel(
                             isLoading = false,
                             currentDocument = null,
                             currentPage = 0,
+                            currentOffset = 0,
+                            pageRanges = emptyList(),
                             pageContent = "",
                             totalPages = 0,
-                            pendingRestoreRatio = null,
                             errorMessage = message,
                         )
                     }
                     _effect.emit(TextViewerEffect.ShowError(message))
                 }
         }
+    }
+
+    private fun resolveRestoreOffset(
+        contentLength: Int,
+        preferredOffset: Int?,
+        preferredPage: Int?,
+        previousPageCount: Int?,
+        previousPageSize: Int?,
+    ): Int {
+        if (contentLength <= 0) return 0
+
+        preferredOffset?.takeIf { it >= 0 }?.let {
+            return it.coerceIn(0, contentLength - 1)
+        }
+
+        val ratio = ResumeProgressCalculator.computeRestoreRatio(
+            preferredPage = preferredPage,
+            previousPageCount = previousPageCount,
+            previousPageSize = previousPageSize,
+        ) ?: return 0
+
+        return (ratio * contentLength).toInt().coerceIn(0, contentLength - 1)
+    }
+
+    private fun applyPageRanges(documentUri: String, ranges: List<TextPageRange>) {
+        val current = _state.value
+        val document = current.currentDocument ?: return
+        if (document.uri != documentUri) return
+        if (document.content.isEmpty()) return
+
+        val normalizedRanges = normalizeRanges(ranges, document.content.length)
+        if (normalizedRanges.isEmpty()) return
+
+        val anchorOffset = pendingRestoreOffset ?: current.currentOffset
+        val safeAnchorOffset = anchorOffset.coerceIn(0, document.content.length - 1)
+        val page = pageIndexForOffset(normalizedRanges, safeAnchorOffset)
+        val selectedRange = normalizedRanges[page]
+
+        _state.update {
+            it.copy(
+                currentPage = page,
+                currentOffset = selectedRange.startOffset,
+                pageRanges = normalizedRanges,
+                totalPages = normalizedRanges.size,
+                pageContent = document.content.substring(selectedRange.startOffset, selectedRange.endOffset),
+            )
+        }
+        pendingRestoreOffset = null
+
+        viewModelScope.launch {
+            persistCurrentProgress(document, page, selectedRange.startOffset)
+        }
+    }
+
+    private fun movePage(delta: Int) {
+        val current = _state.value
+        val document = current.currentDocument ?: return
+        val ranges = current.pageRanges
+        if (ranges.isEmpty() || delta == 0) return
+
+        val currentPage = current.currentPage.coerceIn(0, ranges.size - 1)
+        val currentRange = ranges[currentPage]
+        val anchorOffset = if (delta > 0) {
+            currentRange.endOffset.coerceIn(0, document.content.length)
+        } else {
+            (currentRange.startOffset - 1).coerceIn(0, document.content.length)
+        }
+
+        val targetPage = pageIndexForOffset(
+            ranges = ranges,
+            offset = anchorOffset,
+            preferNextOnBoundary = delta > 0,
+        )
+        setPage(targetPage)
+    }
+
+    private fun normalizeRanges(
+        ranges: List<TextPageRange>,
+        contentLength: Int,
+    ): List<TextPageRange> {
+        if (contentLength <= 0) return listOf(TextPageRange(startOffset = 0, endOffset = 0))
+        if (ranges.isEmpty()) return listOf(TextPageRange(startOffset = 0, endOffset = contentLength))
+
+        val sortedRanges = ranges
+            .asSequence()
+            .map { range ->
+                val start = range.startOffset.coerceIn(0, contentLength)
+                val end = range.endOffset.coerceIn(start, contentLength)
+                TextPageRange(startOffset = start, endOffset = end)
+            }
+            .filter { it.endOffset > it.startOffset }
+            .sortedBy { it.startOffset }
+            .toList()
+
+        if (sortedRanges.isEmpty()) {
+            return listOf(TextPageRange(startOffset = 0, endOffset = contentLength))
+        }
+
+        val normalized = mutableListOf<TextPageRange>()
+        var cursor = 0
+
+        sortedRanges.forEach { range ->
+            val start = range.startOffset.coerceAtLeast(cursor)
+            val end = range.endOffset.coerceAtLeast(start).coerceAtMost(contentLength)
+
+            if (end <= cursor) return@forEach
+
+            if (start > cursor) {
+                normalized += TextPageRange(startOffset = cursor, endOffset = start)
+            }
+
+            normalized += TextPageRange(startOffset = start, endOffset = end)
+            cursor = end
+            if (cursor >= contentLength) return@forEach
+        }
+
+        if (cursor < contentLength) {
+            normalized += TextPageRange(startOffset = cursor, endOffset = contentLength)
+        }
+
+        return normalized
+    }
+
+    private fun pageIndexForOffset(
+        ranges: List<TextPageRange>,
+        offset: Int,
+        preferNextOnBoundary: Boolean = false,
+    ): Int {
+        if (ranges.isEmpty()) return 0
+
+        val safeOffset = offset.coerceIn(0, ranges.last().endOffset)
+        val directMatch = ranges.indexOfFirst { safeOffset >= it.startOffset && safeOffset < it.endOffset }
+        if (directMatch >= 0) return directMatch
+
+        if (safeOffset <= ranges.first().startOffset) return 0
+        if (safeOffset >= ranges.last().endOffset) return ranges.lastIndex
+
+        val boundaryMatch = ranges.indexOfLast { it.endOffset == safeOffset || it.endOffset < safeOffset }
+        if (boundaryMatch < 0) return 0
+        if (
+            preferNextOnBoundary &&
+            ranges[boundaryMatch].endOffset == safeOffset &&
+            boundaryMatch + 1 < ranges.size
+        ) return boundaryMatch + 1
+
+        return boundaryMatch
     }
 
     private fun formatOpenFileError(throwable: Throwable): String {
@@ -189,6 +343,7 @@ class TextViewerViewModel(
                 preferredPage = latest.currentPage,
                 previousPageCount = latest.totalPages,
                 previousPageSize = latest.pageSize,
+                preferredOffset = latest.currentOffset.takeIf { it >= 0 },
                 emitResumed = true,
             )
         }
@@ -197,38 +352,36 @@ class TextViewerViewModel(
     private fun setPage(requestedPage: Int) {
         val current = _state.value
         val document = current.currentDocument ?: return
-        val safePage = PaginationUtil.clampPage(requestedPage, current.totalPages)
+        val ranges = current.pageRanges
+        if (ranges.isEmpty()) return
+
+        val safePage = requestedPage.coerceIn(0, ranges.size - 1)
         if (safePage == current.currentPage) return
+
+        val range = ranges[safePage]
 
         _state.update {
             it.copy(
                 currentPage = safePage,
-                pageContent = document.pages.getOrElse(safePage) { "" },
+                currentOffset = range.startOffset,
+                pageContent = document.content.substring(range.startOffset, range.endOffset),
             )
         }
         viewModelScope.launch {
-            persistCurrentProgress(document, safePage)
+            persistCurrentProgress(document, safePage, range.startOffset)
         }
     }
 
-    private fun setVisualTotalPages(estimatedTotalPages: Int) {
-        if (estimatedTotalPages <= 0) return
-
-        _state.update {
-            it.copy(
-                pendingRestoreRatio = null,
-            )
-        }
-    }
-
-    private suspend fun persistCurrentProgress(document: TextDocument, page: Int) {
+    private suspend fun persistCurrentProgress(document: TextDocument, page: Int, offset: Int) {
+        val safeOffset = if (document.content.isEmpty()) 0 else offset.coerceIn(0, document.content.length - 1)
         historyRepository.saveHistory(
             ReadingHistory(
                 fileUri = document.uri,
                 fileName = document.fileName,
                 currentPage = page,
+                currentOffset = safeOffset,
                 pageSize = pageCharLimit,
-                totalPages = document.totalPages,
+                totalPages = _state.value.totalPages,
                 updatedAtMillis = System.currentTimeMillis(),
             ),
         )

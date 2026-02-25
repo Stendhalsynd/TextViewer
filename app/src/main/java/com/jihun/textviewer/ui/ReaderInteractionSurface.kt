@@ -47,18 +47,23 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import com.jihun.textviewer.domain.model.TextPageRange
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
 
 @Composable
@@ -68,30 +73,76 @@ fun ReaderInteractionSurface(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onGoToPage: (Int) -> Unit,
-    onSetTotalPages: (Int) -> Unit,
     onToggleTheme: () -> Unit,
+    onPageRangesUpdated: (String, List<TextPageRange>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val totalPages = state.totalPages.coerceAtLeast(1)
+    val totalPages = state.totalPages
+    val hasValidTotalPages = totalPages > 0
     val pageNumber = (state.currentPage + 1).coerceAtLeast(1)
 
     var jumpPageText by remember { mutableStateOf(TextFieldValue(pageNumber.toString())) }
     var showJumpPanel by remember { mutableStateOf(false) }
     var containerHeightPx by remember { mutableFloatStateOf(1f) }
+    var contentWidthPx by remember { mutableFloatStateOf(1f) }
+    var contentHeightPx by remember { mutableFloatStateOf(1f) }
     var brightnessLevel by remember(activity) {
         mutableFloatStateOf(readCurrentBrightness(activity))
     }
+    val density = LocalDensity.current
+    val layoutDirection = LocalLayoutDirection.current
+
+    var lastComputedRanges by remember { mutableStateOf<List<TextPageRange>>(emptyList()) }
+    val textStyle = MaterialTheme.typography.bodyLarge
+    val textMeasurer = remember(context, density, layoutDirection) {
+        TextMeasurer(
+            fallbackFontFamilyResolver = createFontFamilyResolver(context),
+            fallbackDensity = density,
+            fallbackLayoutDirection = layoutDirection,
+            cacheSize = 16,
+        )
+    }
 
     val jumpPage = jumpPageText.text.toIntOrNull()
-    val jumpEnabled = jumpPage != null && jumpPage in 1..totalPages
+    val jumpEnabled = state.currentDocument != null && hasValidTotalPages && jumpPage != null && jumpPage in 1..totalPages
     val jumpPageFocus = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val sideGestureWidth = 64.dp
 
-    LaunchedEffect(totalPages, state.currentDocument?.uri, showJumpPanel) {
-        onSetTotalPages(totalPages)
+    val displayedText = when {
+        state.currentDocument == null -> "TXT 파일을 열면 이 영역에서 읽을 수 있습니다."
+        state.pageContent.isNotBlank() -> state.pageContent
+        else -> "페이지 레이아웃을 계산 중입니다..."
+    }
+
+    LaunchedEffect(
+        state.currentDocument?.uri,
+        state.currentDocument?.content,
+        contentWidthPx,
+        contentHeightPx,
+        textStyle,
+    ) {
+        val document = state.currentDocument ?: return@LaunchedEffect
+        val widthPx = contentWidthPx.toInt()
+        val heightPx = contentHeightPx.toInt()
+        if (widthPx <= 0 || heightPx <= 0 || document.content.isEmpty()) return@LaunchedEffect
+
+        val ranges = calculatePageRanges(
+            text = document.content,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            availableWidthPx = widthPx,
+            availableHeightPx = heightPx,
+        )
+        if (ranges != lastComputedRanges) {
+            lastComputedRanges = ranges
+            onPageRangesUpdated(document.uri, ranges)
+        }
+    }
+
+    LaunchedEffect(state.currentPage, state.currentDocument?.uri, showJumpPanel) {
         if (!showJumpPanel) {
             jumpPageText = TextFieldValue(pageNumber.toString())
         }
@@ -109,7 +160,7 @@ fun ReaderInteractionSurface(
 
     val jumpToPage = {
         val target = jumpPage
-        if (target != null) {
+        if (target != null && hasValidTotalPages) {
             onGoToPage((target - 1).coerceIn(0, totalPages - 1))
             showJumpPanel = false
         }
@@ -152,13 +203,15 @@ fun ReaderInteractionSurface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .padding(top = 6.dp),
+                        .padding(top = 6.dp)
+                        .onSizeChanged { size ->
+                            contentWidthPx = size.width.toFloat().coerceAtLeast(1f)
+                            contentHeightPx = size.height.toFloat().coerceAtLeast(1f)
+                        },
                 ) {
                     Text(
-                        text = state.pageContent.ifBlank {
-                            "TXT 파일을 열면 이 영역에서 읽을 수 있습니다."
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
+                        text = displayedText,
+                        style = textStyle,
                     )
                 }
             }
@@ -168,86 +221,85 @@ fun ReaderInteractionSurface(
                 enter = fadeIn() + scaleIn(initialScale = 0.96f),
                 exit = fadeOut() + scaleOut(targetScale = 0.96f),
                 modifier = Modifier.matchParentSize(),
-                content = {
-                    if (showJumpPanel && state.currentDocument != null) {
-                        Box(
+            ) {
+                if (showJumpPanel && state.currentDocument != null) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .zIndex(20f)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f)),
+                    ) {
+                        Card(
                             modifier = Modifier
-                                .matchParentSize()
-                                .zIndex(20f)
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f)),
+                                .align(Alignment.TopCenter)
+                                .padding(top = 52.dp)
+                                .width(300.dp)
+                                .zIndex(30f),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
                         ) {
-                            Card(
+                            Column(
                                 modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .padding(top = 52.dp)
-                                    .width(300.dp)
-                                    .zIndex(30f),
-                                shape = RoundedCornerShape(18.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Column(
-                                    modifier = Modifier
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            text = "페이지 이동",
-                                            style = MaterialTheme.typography.titleSmall,
-                                        )
-                                        TextButton(onClick = { showJumpPanel = false }) {
-                                            Text("닫기")
-                                        }
+                                    Text(
+                                        text = "페이지 이동",
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                    TextButton(onClick = { showJumpPanel = false }) {
+                                        Text("닫기")
                                     }
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
+                                }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    OutlinedTextField(
+                                        value = jumpPageText,
+                                        onValueChange = { value ->
+                                            val digits = value.text.filter { it.isDigit() }.take(5)
+                                            val selection = value.selection.let { textRange ->
+                                                TextRange(
+                                                    textRange.start.coerceIn(0, digits.length),
+                                                    textRange.end.coerceIn(0, digits.length),
+                                                )
+                                            }
+                                            jumpPageText = value.copy(text = digits, selection = selection)
+                                        },
+                                        keyboardOptions = KeyboardOptions(
+                                            keyboardType = KeyboardType.Number,
+                                            imeAction = ImeAction.Done,
+                                        ),
+                                        keyboardActions = KeyboardActions(onDone = { jumpToPage() }),
+                                        singleLine = true,
+                                        label = { Text("이동할 페이지") },
+                                        modifier = Modifier
+                                            .width(126.dp)
+                                            .focusRequester(jumpPageFocus),
+                                    )
+                                    Text(
+                                        text = "/ $totalPages",
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                    Button(
+                                        onClick = jumpToPage,
+                                        enabled = jumpEnabled,
                                     ) {
-                                        OutlinedTextField(
-                                            value = jumpPageText,
-                                            onValueChange = { value ->
-                                                val digits = value.text.filter { it.isDigit() }.take(5)
-                                                val selection = value.selection.let { textRange ->
-                                                    TextRange(
-                                                        textRange.start.coerceIn(0, digits.length),
-                                                        textRange.end.coerceIn(0, digits.length),
-                                                    )
-                                                }
-                                                jumpPageText = value.copy(text = digits, selection = selection)
-                                            },
-                                            keyboardOptions = KeyboardOptions(
-                                                keyboardType = KeyboardType.Number,
-                                                imeAction = ImeAction.Done,
-                                            ),
-                                            keyboardActions = KeyboardActions(onDone = { jumpToPage() }),
-                                            singleLine = true,
-                                            label = { Text("이동할 페이지") },
-                                            modifier = Modifier
-                                                .width(126.dp)
-                                                .focusRequester(jumpPageFocus),
-                                        )
-                                        Text(
-                                            text = "/ $totalPages",
-                                            style = MaterialTheme.typography.labelLarge,
-                                        )
-                                        Button(
-                                            onClick = jumpToPage,
-                                            enabled = jumpEnabled,
-                                        ) {
-                                            Text("이동")
-                                        }
+                                        Text("이동")
                                     }
                                 }
                             }
                         }
                     }
-                },
-            )
+                }
+            }
 
             if (state.currentDocument != null) {
                 Box(
@@ -256,7 +308,7 @@ fun ReaderInteractionSurface(
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
                 ) {
                     Text(
-                        text = "$pageNumber / $totalPages",
+                        text = if (hasValidTotalPages) "$pageNumber / $totalPages" else "계산 중",
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(top = 12.dp, end = 20.dp)

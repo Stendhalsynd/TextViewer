@@ -31,4 +31,37 @@ class ResumeProgressCalculatorTest {
 
         assertEquals(9, page)
     }
+
+    @Test
+    fun resolvePageFromHistory_usesSameUnitPageIndexWhenPageCountMatches() {
+        val page = ResumeProgressCalculator.resolvePageFromHistory(
+            preferredPage = 4,
+            previousPageCount = 10,
+            previousPageSize = 1800,
+            currentPageCount = 10,
+            currentPageSize = 1800,
+        )
+
+        assertEquals(4, page)
+    }
+
+    @Test
+    fun resolvePageFromHistory_fallsBackToRatioWhenPageUnitsChange() {
+        val ratio = ResumeProgressCalculator.computeRestoreRatio(
+            preferredPage = 4,
+            previousPageCount = 10,
+            previousPageSize = 1500,
+        )
+
+        val page = ResumeProgressCalculator.resolvePageFromHistory(
+            preferredPage = 4,
+            previousPageCount = 10,
+            previousPageSize = 1500,
+            currentPageCount = 21,
+            currentPageSize = 1800,
+        )
+
+        assertEquals(9, page)
+        assertEquals(0.45f, ratio ?: -1f, 0.000_001f)
+    }
 }
