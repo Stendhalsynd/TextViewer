@@ -31,16 +31,23 @@ class TextViewerViewModel(
 
     fun onAction(action: TextViewerAction) {
         when (action) {
-            is TextViewerAction.OpenFile -> openFile(action.uri, preferredPage = null, emitResumed = false)
+            is TextViewerAction.OpenFile -> openFile(
+                uri = action.uri,
+                preferredPage = null,
+                emitResumed = false,
+            )
             is TextViewerAction.OpenHistoryEntry -> openFile(
                 uri = Uri.parse(action.fileUri),
                 preferredPage = action.page,
+                previousPageCount = action.totalPages,
+                previousPageSize = action.pageSize,
                 emitResumed = true,
             )
             TextViewerAction.LoadHistory -> loadHistory()
             TextViewerAction.ResumeLastSession -> resumeLastSession()
             TextViewerAction.CloseDocument -> closeDocument()
             is TextViewerAction.GoToPage -> setPage(action.page)
+            is TextViewerAction.SetVisualPageCount -> setVisualTotalPages(action.totalPages)
             TextViewerAction.NextPage -> setPage(_state.value.currentPage + 1)
             TextViewerAction.PreviousPage -> setPage(_state.value.currentPage - 1)
         }
@@ -54,29 +61,53 @@ class TextViewerViewModel(
                 currentPage = 0,
                 pageContent = "",
                 totalPages = 0,
+                pendingRestoreRatio = null,
                 errorMessage = null,
             )
         }
     }
 
-    private fun openFile(uri: Uri, preferredPage: Int?, emitResumed: Boolean) {
+    private fun openFile(
+        uri: Uri,
+        preferredPage: Int?,
+        previousPageCount: Int? = null,
+        previousPageSize: Int? = null,
+        emitResumed: Boolean,
+    ) {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, errorMessage = null) }
 
             textFileRepository.loadTextFile(uri)
                 .onSuccess { document ->
-                    val safePage = PaginationUtil.clampPage(preferredPage ?: 0, document.totalPages)
+                    val restoreRatio = preferredPage?.let { preferred ->
+                        if (
+                            preferred >= 0 &&
+                            previousPageCount != null &&
+                            previousPageCount > 0 &&
+                            (previousPageSize == null || previousPageSize > 0)
+                        ) {
+                            (preferred + 0.5f) / previousPageCount.toFloat()
+                        } else {
+                            null
+                        }
+                    }
+
                     _state.update {
                         it.copy(
                             isLoading = false,
                             currentDocument = document,
-                            currentPage = safePage,
-                            pageContent = document.pages.getOrElse(safePage) { "" },
-                            totalPages = document.totalPages,
+                            currentPage = 0,
+                            pageContent = document.content,
+                            totalPages = 1,
+                            pendingRestoreRatio = restoreRatio,
                             errorMessage = null,
                         )
                     }
-                    persistCurrentProgress(document, safePage)
+
+                    if (restoreRatio == null) {
+                        persistCurrentProgress(document, 0)
+                    }
+
                     if (emitResumed) {
                         _effect.emit(TextViewerEffect.Resumed)
                     } else {
@@ -113,6 +144,8 @@ class TextViewerViewModel(
             openFile(
                 uri = Uri.parse(latest.fileUri),
                 preferredPage = latest.currentPage,
+                previousPageCount = latest.totalPages,
+                previousPageSize = latest.pageSize,
                 emitResumed = true,
             )
         }
@@ -121,15 +154,44 @@ class TextViewerViewModel(
     private fun setPage(requestedPage: Int) {
         val current = _state.value
         val document = current.currentDocument ?: return
-        val safePage = PaginationUtil.clampPage(requestedPage, document.totalPages)
+        val safePage = PaginationUtil.clampPage(requestedPage, current.totalPages)
+        if (safePage == current.currentPage) return
+
         _state.update {
             it.copy(
                 currentPage = safePage,
-                pageContent = document.pages.getOrElse(safePage) { "" },
             )
         }
         viewModelScope.launch {
             persistCurrentProgress(document, safePage)
+        }
+    }
+
+    private fun setVisualTotalPages(estimatedTotalPages: Int) {
+        val current = _state.value
+        val safeTotalPages = estimatedTotalPages.coerceAtLeast(1)
+        val restoredPage = current.pendingRestoreRatio?.let { ratio ->
+            ((safeTotalPages - 1) * ratio).toInt().coerceIn(0, safeTotalPages - 1)
+        }
+        val nextPage = PaginationUtil.clampPage(restoredPage ?: current.currentPage, safeTotalPages)
+        val shouldClearPendingRatio = current.pendingRestoreRatio != null &&
+            (safeTotalPages > 1 || restoredPage != 0)
+
+        if (nextPage == current.currentPage && safeTotalPages == current.totalPages && current.pendingRestoreRatio == null) return
+
+        _state.update {
+            it.copy(
+                totalPages = safeTotalPages,
+                currentPage = nextPage,
+                pendingRestoreRatio = if (shouldClearPendingRatio) null else it.pendingRestoreRatio,
+            )
+        }
+
+        if (nextPage != current.currentPage) {
+            val document = current.currentDocument ?: return
+            viewModelScope.launch {
+                persistCurrentProgress(document, nextPage)
+            }
         }
     }
 

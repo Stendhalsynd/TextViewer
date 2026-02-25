@@ -11,7 +11,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,8 +59,8 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
 
 @Composable
@@ -70,6 +70,7 @@ fun ReaderInteractionSurface(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onGoToPage: (Int) -> Unit,
+    onSetTotalPages: (Int) -> Unit,
     onToggleTheme: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -81,7 +82,8 @@ fun ReaderInteractionSurface(
 
     var jumpPageText by remember { mutableStateOf(TextFieldValue(pageNumber.toString())) }
     var showJumpPanel by remember { mutableStateOf(false) }
-    var containerHeightPx by remember { mutableStateOf(1f) }
+    var containerHeightPx by remember { mutableFloatStateOf(1f) }
+    var contentViewportHeightPx by remember { mutableFloatStateOf(1f) }
     var brightnessLevel by remember(activity) {
         mutableFloatStateOf(readCurrentBrightness(activity))
     }
@@ -92,7 +94,38 @@ fun ReaderInteractionSurface(
     val keyboardController = LocalSoftwareKeyboardController.current
     val sideGestureWidth = 64.dp
 
-    LaunchedEffect(state.currentPage, totalPages, showJumpPanel) {
+    val estimatedTotalPages = if (contentViewportHeightPx > 1f) {
+        (pageContentScrollState.maxValue / contentViewportHeightPx.toInt()) + 1
+    } else {
+        1
+    }
+
+    LaunchedEffect(state.currentPage, contentViewportHeightPx) {
+        if (contentViewportHeightPx > 1f) {
+            val target = (state.currentPage * contentViewportHeightPx).toInt()
+            val clampedTarget = target.coerceIn(0, pageContentScrollState.maxValue)
+            if (pageContentScrollState.value != clampedTarget) {
+                pageContentScrollState.scrollTo(clampedTarget)
+            }
+        }
+    }
+
+    LaunchedEffect(estimatedTotalPages, state.currentDocument?.uri) {
+        onSetTotalPages(estimatedTotalPages)
+    }
+
+    LaunchedEffect(pageContentScrollState.value, contentViewportHeightPx, state.totalPages) {
+        if (contentViewportHeightPx > 1f) {
+            val derivedPage = (pageContentScrollState.value.toFloat() / contentViewportHeightPx).toInt()
+            val maxPage = totalPages - 1
+            val boundedPage = derivedPage.coerceIn(0, maxPage)
+            if (boundedPage != state.currentPage) {
+                onGoToPage(boundedPage)
+            }
+        }
+    }
+
+    LaunchedEffect(state.currentDocument?.uri, showJumpPanel) {
         if (!showJumpPanel) {
             jumpPageText = TextFieldValue(pageNumber.toString())
         }
@@ -108,7 +141,7 @@ fun ReaderInteractionSurface(
         }
     }
 
-    LaunchedEffect(state.currentPage, state.currentDocument?.uri) {
+    LaunchedEffect(state.currentDocument?.uri) {
         pageContentScrollState.scrollTo(0)
     }
 
@@ -158,7 +191,13 @@ fun ReaderInteractionSurface(
                         .fillMaxWidth()
                         .weight(1f)
                         .padding(top = 6.dp)
-                        .verticalScroll(pageContentScrollState),
+                        .onSizeChanged { size ->
+                            contentViewportHeightPx = size.height.toFloat().coerceAtLeast(1f)
+                        }
+                        .verticalScroll(
+                            state = pageContentScrollState,
+                            enabled = false,
+                        ),
                 ) {
                     Text(
                         text = state.pageContent.ifBlank {
@@ -180,7 +219,7 @@ fun ReaderInteractionSurface(
                             modifier = Modifier
                                 .matchParentSize()
                                 .zIndex(20f)
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f))
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f)),
                         ) {
                             Card(
                                 modifier = Modifier
@@ -258,123 +297,126 @@ fun ReaderInteractionSurface(
             if (state.currentDocument != null) {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 12.dp, end = 20.dp)
-                        .zIndex(25f)
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
-                        .pointerInput(Unit) {
-                            detectTapGestures {
-                                onToggleTheme()
-                            }
-                        },
-                ) {
-                    Text(
-                        text = "$pageNumber / $totalPages",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 6.dp)
-                        .height(24.dp)
-                        .width(88.dp)
-                        .zIndex(3f)
-                        .semantics { contentDescription = "페이지 이동" }
-                        .background(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.001f),
-                            shape = CircleShape,
-                        )
-                        .pointerInput(Unit) {
-                            detectTapGestures {
-                                showJumpPanel = true
-                            }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                }
-            }
-
-            if (!showJumpPanel) {
-                Row(
-                    modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
                 ) {
-                    Box(
+                    Text(
+                        text = "$pageNumber / $totalPages",
                         modifier = Modifier
-                            .fillMaxHeight()
-                            .width(sideGestureWidth)
-                            .pointerInput(onPreviousPage, containerHeightPx) {
-                                detectTapGestures { offset ->
-                                    if (offset.y >= (containerHeightPx * 0.5f)) {
-                                        onPreviousPage()
-                                    }
+                            .align(Alignment.TopEnd)
+                            .padding(top = 12.dp, end = 20.dp)
+                            .zIndex(25f)
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
+                            .pointerInput(Unit) {
+                                detectTapGestures {
+                                    onToggleTheme()
                                 }
-                            }
-                            .pointerInput(activity, containerHeightPx) {
-                                detectVerticalDragGestures(
-                                    onVerticalDrag = { _, dragAmount ->
-                                        brightnessLevel = adjustBrightness(
-                                            activity = activity,
-                                            current = brightnessLevel,
-                                            dragAmount = dragAmount,
-                                            heightPx = containerHeightPx,
-                                        )
-                                    },
-                                )
                             },
-                    ) {
-                        Text(
-                            text = "밝기",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .graphicsLayer { rotationZ = -90f },
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
                     )
 
                     Box(
                         modifier = Modifier
-                            .fillMaxHeight()
-                            .width(sideGestureWidth)
-                            .pointerInput(onNextPage, containerHeightPx) {
-                                detectTapGestures { offset ->
-                                    if (offset.y >= (containerHeightPx * 0.5f)) {
-                                        onNextPage()
+                            .align(Alignment.TopCenter)
+                            .padding(top = 6.dp)
+                            .height(24.dp)
+                            .width(88.dp)
+                            .zIndex(3f)
+                            .semantics { contentDescription = "페이지 이동" }
+                            .background(
+                                MaterialTheme.colorScheme.surface.copy(alpha = 0.001f),
+                                shape = CircleShape,
+                            )
+                            .pointerInput(Unit) {
+                                detectTapGestures {
+                                    showJumpPanel = true
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                    }
+                }
+
+                if (!showJumpPanel) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f)),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(sideGestureWidth)
+                                .pointerInput(onPreviousPage, containerHeightPx) {
+                                    detectTapGestures { offset ->
+                                        if (offset.y >= (containerHeightPx * 0.5f)) {
+                                            onPreviousPage()
+                                        }
                                     }
                                 }
-                            }
-                            .pointerInput(activity, containerHeightPx) {
-                                detectVerticalDragGestures(
-                                    onVerticalDrag = { _, dragAmount ->
-                                        brightnessLevel = adjustBrightness(
-                                            activity = activity,
-                                            current = brightnessLevel,
-                                            dragAmount = dragAmount,
-                                            heightPx = containerHeightPx,
-                                        )
-                                    },
-                                )
-                            },
-                    ) {
-                        Text(
-                            text = "밝기",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
+                                .pointerInput(activity, containerHeightPx) {
+                                    detectVerticalDragGestures(
+                                        onVerticalDrag = { _, dragAmount ->
+                                            brightnessLevel = adjustBrightness(
+                                                activity = activity,
+                                                current = brightnessLevel,
+                                                dragAmount = dragAmount,
+                                                heightPx = containerHeightPx,
+                                            )
+                                        },
+                                    )
+                                },
+                        ) {
+                            Text(
+                                text = "밝기",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .graphicsLayer { rotationZ = -90f },
+                            )
+                        }
+
+                        Box(
                             modifier = Modifier
-                                .align(Alignment.Center)
-                                .graphicsLayer { rotationZ = 90f },
+                                .weight(1f)
+                                .fillMaxHeight(),
                         )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(sideGestureWidth)
+                                .pointerInput(onNextPage, containerHeightPx) {
+                                    detectTapGestures { offset ->
+                                        if (offset.y >= (containerHeightPx * 0.5f)) {
+                                            onNextPage()
+                                        }
+                                    }
+                                }
+                                .pointerInput(activity, containerHeightPx) {
+                                    detectVerticalDragGestures(
+                                        onVerticalDrag = { _, dragAmount ->
+                                            brightnessLevel = adjustBrightness(
+                                                activity = activity,
+                                                current = brightnessLevel,
+                                                dragAmount = dragAmount,
+                                                heightPx = containerHeightPx,
+                                            )
+                                        },
+                                    )
+                                },
+                        ) {
+                            Text(
+                                text = "밝기",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .graphicsLayer { rotationZ = 90f },
+                            )
+                        }
                     }
                 }
             }

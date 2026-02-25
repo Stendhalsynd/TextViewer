@@ -205,6 +205,9 @@ private fun TextViewerApp(
                     onGoToPage = { page ->
                         viewModel.onAction(TextViewerAction.GoToPage(page))
                     },
+                    onSetTotalPages = { totalPages ->
+                        viewModel.onAction(TextViewerAction.SetVisualPageCount(totalPages))
+                    },
                     onToggleTheme = onToggleTheme,
                 )
             }
@@ -216,6 +219,8 @@ private fun TextViewerApp(
                             TextViewerAction.OpenHistoryEntry(
                                 fileUri = entry.fileUri,
                                 page = entry.currentPage,
+                                totalPages = entry.totalPages,
+                                pageSize = entry.pageSize,
                             ),
                         )
                         navigateToHome()

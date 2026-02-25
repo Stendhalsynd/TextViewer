@@ -42,6 +42,7 @@ fun TextViewerHomeScreen(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     onGoToPage: (Int) -> Unit,
+    onSetTotalPages: (Int) -> Unit,
     onToggleTheme: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -51,6 +52,7 @@ fun TextViewerHomeScreen(
                 onPreviousPage = onPreviousPage,
                 onNextPage = onNextPage,
                 onGoToPage = onGoToPage,
+                onSetTotalPages = onSetTotalPages,
                 onToggleTheme = onToggleTheme,
                 modifier = Modifier
                     .fillMaxSize()
