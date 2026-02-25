@@ -66,6 +66,25 @@ fun TextViewerHomeScreen(
             )
         }
 
+        if (state.errorMessage != null) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(top = 10.dp, start = 12.dp, end = 12.dp),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.errorContainer,
+                tonalElevation = 4.dp,
+            ) {
+                Text(
+                    text = "오류: ${state.errorMessage}",
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+            }
+        }
+
         if (state.currentDocument == null) {
             Row(
                 modifier = Modifier

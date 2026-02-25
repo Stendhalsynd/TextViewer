@@ -14,8 +14,11 @@ class DefaultTextFileRepository(
 
     override suspend fun loadTextFile(uri: Uri): Result<TextDocument> {
         val fileName = loader.getDisplayName(uri) ?: uri.lastPathSegment
-        if (!TextFileValidator.isTxtFile(uri, fileName)) {
-            return Result.failure(IllegalArgumentException("Only .txt files are supported"))
+        val mimeType = loader.getMimeType(uri)
+        if (!TextFileValidator.isTxtFile(uri, fileName, mimeType)) {
+            return Result.failure(
+                IllegalArgumentException("지원되지 않는 파일 형식입니다. TXT/텍스트 파일만 열 수 있습니다."),
+            )
         }
 
         return loader.loadText(uri).map { content ->
@@ -30,7 +33,8 @@ class DefaultTextFileRepository(
 
     override fun isTxtFile(uri: Uri): Boolean {
         val fileName = loader.getDisplayName(uri) ?: uri.lastPathSegment
-        return TextFileValidator.isTxtFile(uri, fileName)
+        val mimeType = loader.getMimeType(uri)
+        return TextFileValidator.isTxtFile(uri, fileName, mimeType)
     }
 
     companion object {

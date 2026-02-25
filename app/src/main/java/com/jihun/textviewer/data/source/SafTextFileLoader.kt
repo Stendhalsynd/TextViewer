@@ -12,10 +12,27 @@ class SafTextFileLoader(
 ) {
     suspend fun loadText(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
-            contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
-                reader.readText()
-            } ?: throw IOException("Unable to open input stream for URI: $uri")
+            val inputStream = contentResolver.openInputStream(uri)
+                ?: throw IOException("Input stream is unavailable for URI: $uri")
+            inputStream.use { stream ->
+                stream.bufferedReader(Charsets.UTF_8).use { reader ->
+                    reader.readText()
+                }
+            }
+        }.recoverCatching { throwable ->
+            if (throwable is SecurityException) {
+                throw IOException("Read permission denied for URI: $uri", throwable)
+            }
+            if (throwable is IOException) {
+                throw throwable
+            }
+            throw IOException("Failed to read text file from URI: $uri (${throwable.message})", throwable)
         }
+    }
+
+    fun getMimeType(uri: Uri): String? {
+        return runCatching { contentResolver.getType(uri) }
+            .getOrNull()
     }
 
     fun getDisplayName(uri: Uri): String? {

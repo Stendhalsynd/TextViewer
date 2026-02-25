@@ -79,6 +79,23 @@ class TextViewerViewModel(
 
             textFileRepository.loadTextFile(uri)
                 .onSuccess { document ->
+                    if (document.content.isBlank()) {
+                        val message = "선택한 파일에서 텍스트를 읽을 수 없습니다."
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                currentDocument = null,
+                                currentPage = 0,
+                                pageContent = "",
+                                totalPages = 0,
+                                pendingRestoreRatio = null,
+                                errorMessage = message,
+                            )
+                        }
+                        _effect.emit(TextViewerEffect.ShowError(message))
+                        return@onSuccess
+                    }
+
                     val restoreRatio = preferredPage?.let { preferred ->
                         if (
                             preferred >= 0 &&
@@ -115,10 +132,15 @@ class TextViewerViewModel(
                     }
                 }
                 .onFailure { throwable ->
-                    val message = throwable.message ?: "Failed to open file"
+                    val message = throwable.message?.ifBlank { "Failed to open file" } ?: "Failed to open file"
                     _state.update {
                         it.copy(
                             isLoading = false,
+                            currentDocument = null,
+                            currentPage = 0,
+                            pageContent = "",
+                            totalPages = 0,
+                            pendingRestoreRatio = null,
                             errorMessage = message,
                         )
                     }
