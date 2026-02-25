@@ -5,8 +5,38 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
-import kotlin.math.max
 import com.jihun.textviewer.domain.model.TextPageRange
+import java.util.LinkedHashMap
+import kotlin.math.max
+
+private const val PAGE_RANGE_CACHE_MAX_ENTRIES = 8
+private const val MINIMUM_ESTIMATE_CHARS_PER_PAGE = 220
+
+private data class PageRangeCacheKey(
+    val textHash: Int,
+    val contentLength: Int,
+    val widthPx: Int,
+    val heightPx: Int,
+    val textStyleSignature: Int,
+)
+
+private object PageRangeCache {
+    private val cache: LinkedHashMap<PageRangeCacheKey, List<TextPageRange>> = object : LinkedHashMap<PageRangeCacheKey, List<TextPageRange>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<PageRangeCacheKey, List<TextPageRange>>?): Boolean {
+            return size > PAGE_RANGE_CACHE_MAX_ENTRIES
+        }
+    }
+
+    fun get(key: PageRangeCacheKey): List<TextPageRange>? = synchronized(cache) {
+        cache[key]
+    }
+
+    fun put(key: PageRangeCacheKey, ranges: List<TextPageRange>) {
+        synchronized(cache) {
+            cache[key] = ranges
+        }
+    }
+}
 
 internal fun calculatePageRanges(
     text: String,
@@ -19,6 +49,74 @@ internal fun calculatePageRanges(
         return listOf(TextPageRange(0, 0))
     }
 
+    val key = PageRangeCacheKey(
+        textHash = text.hashCode(),
+        contentLength = text.length,
+        widthPx = availableWidthPx.coerceAtLeast(1),
+        heightPx = availableHeightPx.coerceAtLeast(1),
+        textStyleSignature = textStyleSignature(textStyle),
+    )
+    PageRangeCache.get(key)?.let { return it }
+
+    val ranges = calculatePageRangesExact(
+        text = text,
+        textStyle = textStyle,
+        textMeasurer = textMeasurer,
+        availableWidthPx = key.widthPx,
+        availableHeightPx = key.heightPx,
+    )
+    PageRangeCache.put(key, ranges)
+    return ranges
+}
+
+internal fun estimatePageRanges(
+    text: String,
+    textStyle: TextStyle,
+    textMeasurer: TextMeasurer,
+    availableWidthPx: Int,
+    availableHeightPx: Int,
+): List<TextPageRange> {
+    if (text.isEmpty()) {
+        return listOf(TextPageRange(0, 0))
+    }
+
+    val width = availableWidthPx.coerceAtLeast(1)
+    val height = availableHeightPx.coerceAtLeast(1)
+
+    val sample = textMeasurer.measure(
+        text = AnnotatedString("가나다라마바사"),
+        style = textStyle,
+        constraints = Constraints(maxWidth = width),
+        softWrap = false,
+        overflow = TextOverflow.Clip,
+    )
+    val averageCharWidth = sample.size.width.toFloat().coerceAtLeast(1f) / 7f
+    val approximateLinesPerPage = (height / sample.size.height.coerceAtLeast(1)).coerceAtLeast(1)
+    val approximateCharsPerLine = (width / averageCharWidth).toInt().coerceAtLeast(8)
+    val approximateCharsPerPage = (approximateCharsPerLine * approximateLinesPerPage).coerceAtLeast(MINIMUM_ESTIMATE_CHARS_PER_PAGE)
+
+    val ranges = mutableListOf<TextPageRange>()
+    var start = 0
+    while (start < text.length) {
+        val candidateEnd = start + approximateCharsPerPage
+        val end = candidateEnd.coerceAtMost(text.length).coerceAtLeast(start + 1)
+        ranges += TextPageRange(startOffset = start, endOffset = end)
+        start = end
+    }
+
+    return normalizePageRanges(
+        ranges = ranges,
+        contentLength = text.length,
+    )
+}
+
+private fun calculatePageRangesExact(
+    text: String,
+    textStyle: TextStyle,
+    textMeasurer: TextMeasurer,
+    availableWidthPx: Int,
+    availableHeightPx: Int,
+): List<TextPageRange> {
     val width = availableWidthPx.coerceAtLeast(1)
     val height = availableHeightPx.coerceAtLeast(1)
 
@@ -67,6 +165,22 @@ internal fun calculatePageRanges(
         ranges = rawRanges,
         contentLength = text.length,
     )
+}
+
+private fun textStyleSignature(textStyle: TextStyle): Int {
+    var signature = 17
+    fun mix(value: Int) {
+        signature = 31 * signature + value
+    }
+
+    mix(textStyle.fontSize.value.toBits().toInt())
+    mix(textStyle.letterSpacing.value.toBits().toInt())
+    mix(textStyle.lineHeight.value.toBits().toInt())
+    mix(textStyle.fontWeight?.weight ?: 0)
+    mix(textStyle.fontStyle?.hashCode() ?: 0)
+    mix(textStyle.fontFamily?.hashCode() ?: 0)
+
+    return signature
 }
 
 private fun normalizePageRanges(

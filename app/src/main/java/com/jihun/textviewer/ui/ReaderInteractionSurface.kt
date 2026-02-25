@@ -11,6 +11,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -65,6 +67,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.jihun.textviewer.domain.model.TextPageRange
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
+import kotlinx.coroutines.delay
 
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
@@ -123,11 +126,27 @@ fun ReaderInteractionSurface(
         contentWidthPx,
         contentHeightPx,
         textStyle,
+        textMeasurer,
     ) {
         val document = state.currentDocument ?: return@LaunchedEffect
         val widthPx = contentWidthPx.toInt()
         val heightPx = contentHeightPx.toInt()
         if (widthPx <= 0 || heightPx <= 0 || document.content.isEmpty()) return@LaunchedEffect
+
+        // Debounce repeated size/layout updates and avoid expensive repeated recalculation.
+        delay(80L)
+
+        val estimate = estimatePageRanges(
+            text = document.content,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            availableWidthPx = widthPx,
+            availableHeightPx = heightPx,
+        )
+        if (estimate != lastComputedRanges) {
+            lastComputedRanges = estimate
+            onPageRangesUpdated(document.uri, estimate)
+        }
 
         val ranges = calculatePageRanges(
             text = document.content,
@@ -308,20 +327,18 @@ fun ReaderInteractionSurface(
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
                 ) {
                     Text(
-                        text = if (hasValidTotalPages) "$pageNumber / $totalPages" else "계산 중",
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 12.dp, end = 20.dp)
-                            .zIndex(25f)
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
-                            .pointerInput(Unit) {
-                                detectTapGestures {
-                                    onToggleTheme()
-                                }
-                            },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
-                    )
+                            text = if (hasValidTotalPages) "$pageNumber / $totalPages" else "계산 중",
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 8.dp, end = 12.dp)
+                                .sizeIn(minHeight = 40.dp, minWidth = 72.dp)
+                                .zIndex(25f)
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
+                                .clickable { onToggleTheme() }
+                                .semantics { this.contentDescription = "테마 전환" },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
+                        )
 
                     Box(
                         modifier = Modifier
