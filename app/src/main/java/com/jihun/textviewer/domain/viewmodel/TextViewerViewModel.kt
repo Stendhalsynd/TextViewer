@@ -101,22 +101,27 @@ class TextViewerViewModel(
                         previousPageCount = previousPageCount,
                         previousPageSize = previousPageSize,
                     )
+                    val initialPage = if (restoreRatio == null) {
+                        PaginationUtil.clampPage(preferredPage ?: 0, document.totalPages)
+                    } else {
+                        ResumeProgressCalculator.resolvePageFromRatio(
+                            ratio = restoreRatio,
+                            totalPages = document.totalPages,
+                        )
+                    }
 
                     _state.update {
                         it.copy(
                             isLoading = false,
                             currentDocument = document,
-                            currentPage = 0,
-                            pageContent = document.content,
-                            totalPages = 1,
-                            pendingRestoreRatio = restoreRatio,
+                            currentPage = initialPage,
+                            pageContent = document.pages.getOrElse(initialPage) { "" },
+                            totalPages = document.totalPages,
+                            pendingRestoreRatio = null,
                             errorMessage = null,
                         )
                     }
-
-                    if (restoreRatio == null) {
-                        persistCurrentProgress(document, 0)
-                    }
+                    persistCurrentProgress(document, initialPage)
 
                     if (emitResumed) {
                         _effect.emit(TextViewerEffect.Resumed)
@@ -198,6 +203,7 @@ class TextViewerViewModel(
         _state.update {
             it.copy(
                 currentPage = safePage,
+                pageContent = document.pages.getOrElse(safePage) { "" },
             )
         }
         viewModelScope.launch {
@@ -206,33 +212,12 @@ class TextViewerViewModel(
     }
 
     private fun setVisualTotalPages(estimatedTotalPages: Int) {
-        val current = _state.value
-        val safeTotalPages = estimatedTotalPages.coerceAtLeast(1)
-        val restoredPage = current.pendingRestoreRatio?.let { ratio ->
-            ResumeProgressCalculator.resolvePageFromRatio(
-                ratio = ratio,
-                totalPages = safeTotalPages,
-            )
-        }
-        val nextPage = PaginationUtil.clampPage(restoredPage ?: current.currentPage, safeTotalPages)
-        val shouldClearPendingRatio = current.pendingRestoreRatio != null &&
-            (safeTotalPages > 1 || restoredPage != 0)
-
-        if (nextPage == current.currentPage && safeTotalPages == current.totalPages && current.pendingRestoreRatio == null) return
+        if (estimatedTotalPages <= 0) return
 
         _state.update {
             it.copy(
-                totalPages = safeTotalPages,
-                currentPage = nextPage,
-                pendingRestoreRatio = if (shouldClearPendingRatio) null else it.pendingRestoreRatio,
+                pendingRestoreRatio = null,
             )
-        }
-
-        if (nextPage != current.currentPage) {
-            val document = current.currentDocument ?: return
-            viewModelScope.launch {
-                persistCurrentProgress(document, nextPage)
-            }
         }
     }
 

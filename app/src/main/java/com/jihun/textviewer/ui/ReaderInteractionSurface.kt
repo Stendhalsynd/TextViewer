@@ -21,8 +21,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -78,12 +76,10 @@ fun ReaderInteractionSurface(
     val activity = remember(context) { context.findActivity() }
     val totalPages = state.totalPages.coerceAtLeast(1)
     val pageNumber = (state.currentPage + 1).coerceAtLeast(1)
-    val pageContentScrollState = rememberScrollState()
 
     var jumpPageText by remember { mutableStateOf(TextFieldValue(pageNumber.toString())) }
     var showJumpPanel by remember { mutableStateOf(false) }
     var containerHeightPx by remember { mutableFloatStateOf(1f) }
-    var contentViewportHeightPx by remember { mutableFloatStateOf(1f) }
     var brightnessLevel by remember(activity) {
         mutableFloatStateOf(readCurrentBrightness(activity))
     }
@@ -94,38 +90,8 @@ fun ReaderInteractionSurface(
     val keyboardController = LocalSoftwareKeyboardController.current
     val sideGestureWidth = 64.dp
 
-    val estimatedTotalPages = if (contentViewportHeightPx > 1f) {
-        (pageContentScrollState.maxValue / contentViewportHeightPx.toInt()) + 1
-    } else {
-        1
-    }
-
-    LaunchedEffect(state.currentPage, contentViewportHeightPx) {
-        if (contentViewportHeightPx > 1f) {
-            val target = (state.currentPage * contentViewportHeightPx).toInt()
-            val clampedTarget = target.coerceIn(0, pageContentScrollState.maxValue)
-            if (pageContentScrollState.value != clampedTarget) {
-                pageContentScrollState.scrollTo(clampedTarget)
-            }
-        }
-    }
-
-    LaunchedEffect(estimatedTotalPages, state.currentDocument?.uri) {
-        onSetTotalPages(estimatedTotalPages)
-    }
-
-    LaunchedEffect(pageContentScrollState.value, contentViewportHeightPx, state.totalPages) {
-        if (contentViewportHeightPx > 1f) {
-            val derivedPage = (pageContentScrollState.value.toFloat() / contentViewportHeightPx).toInt()
-            val maxPage = totalPages - 1
-            val boundedPage = derivedPage.coerceIn(0, maxPage)
-            if (boundedPage != state.currentPage) {
-                onGoToPage(boundedPage)
-            }
-        }
-    }
-
-    LaunchedEffect(state.currentDocument?.uri, showJumpPanel) {
+    LaunchedEffect(totalPages, state.currentDocument?.uri, showJumpPanel) {
+        onSetTotalPages(totalPages)
         if (!showJumpPanel) {
             jumpPageText = TextFieldValue(pageNumber.toString())
         }
@@ -139,10 +105,6 @@ fun ReaderInteractionSurface(
         } else {
             keyboardController?.hide()
         }
-    }
-
-    LaunchedEffect(state.currentDocument?.uri) {
-        pageContentScrollState.scrollTo(0)
     }
 
     val jumpToPage = {
@@ -190,14 +152,7 @@ fun ReaderInteractionSurface(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
-                        .padding(top = 6.dp)
-                        .onSizeChanged { size ->
-                            contentViewportHeightPx = size.height.toFloat().coerceAtLeast(1f)
-                        }
-                        .verticalScroll(
-                            state = pageContentScrollState,
-                            enabled = false,
-                        ),
+                        .padding(top = 6.dp),
                 ) {
                     Text(
                         text = state.pageContent.ifBlank {

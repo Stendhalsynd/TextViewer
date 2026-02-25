@@ -205,9 +205,7 @@ private fun TextViewerApp(
                     onGoToPage = { page ->
                         viewModel.onAction(TextViewerAction.GoToPage(page))
                     },
-                    onSetTotalPages = { totalPages ->
-                        viewModel.onAction(TextViewerAction.SetVisualPageCount(totalPages))
-                    },
+                    onSetTotalPages = { _ -> },
                     onToggleTheme = onToggleTheme,
                 )
             }

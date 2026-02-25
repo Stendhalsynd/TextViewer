@@ -61,7 +61,7 @@ class TextViewerViewModelTest {
         advanceUntilIdle()
 
         assertEquals(document, viewModel.state.value.currentDocument)
-        assertEquals(1, viewModel.state.value.totalPages)
+        assertEquals(document.totalPages, viewModel.state.value.totalPages)
         assertNull(viewModel.state.value.pendingRestoreRatio)
         assertEquals("첫 페이지 저장 이력이 기록되어야 합니다", 1, historyRepository.saved.size)
         assertEquals(0, historyRepository.saved.last().currentPage)
@@ -98,16 +98,17 @@ class TextViewerViewModelTest {
         advanceUntilIdle()
 
         val expectedRatio = (4 + 0.5f) / 10f
-        assertEquals(expectedRatio, viewModel.state.value.pendingRestoreRatio ?: 0f, 0.000_001f)
-
-        viewModel.onAction(TextViewerAction.SetVisualPageCount(21))
-        advanceUntilIdle()
-
-        val expectedPage = ((21 - 1) * expectedRatio).toInt().coerceIn(0, 20)
+        val expectedPage = ResumeProgressCalculator.resolvePageFromRatio(
+            ratio = expectedRatio,
+            totalPages = document.totalPages,
+        )
+        assertNull(viewModel.state.value.pendingRestoreRatio)
         assertEquals(expectedPage, viewModel.state.value.currentPage)
         assertEquals(document.uri, viewModel.state.value.currentDocument?.uri)
         assertEquals(expectedPage, historyRepository.saved.last().currentPage)
-        assertNull(viewModel.state.value.pendingRestoreRatio)
+        viewModel.onAction(TextViewerAction.SetVisualPageCount(21))
+        advanceUntilIdle()
+        assertEquals(expectedPage, viewModel.state.value.currentPage)
         assertTrue(effect.await() is TextViewerEffect.Resumed)
     }
 
