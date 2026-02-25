@@ -28,9 +28,9 @@ class SafTextFileLoader(
                                 val read = reader.read(buffer)
                                 if (read == -1) break
                                 totalChars += read
-                                if (totalChars > MAX_TEXT_CHAR_COUNT) {
+                                if (TextFileReadLimits.shouldReject(totalChars)) {
                                     throw IOException(
-                                        "파일이 너무 큽니다 (최대 ${MAX_TEXT_CHAR_COUNT}자): $uri",
+                                        "파일이 너무 큽니다 (최대 ${TextFileReadLimits.MAX_TEXT_CHAR_COUNT}자): $uri",
                                     )
                                 }
                                 builder.append(buffer, 0, read)
@@ -84,9 +84,8 @@ class SafTextFileLoader(
     }
 
     private companion object {
-        const val READ_TIMEOUT_MS = 15_000L
+        const val READ_TIMEOUT_MS = 30_000L
         const val QUERY_TIMEOUT_MS = 5_000L
         const val TEXT_BUFFER_SIZE = 8_192
-        const val MAX_TEXT_CHAR_COUNT = 1_000_000
     }
 }

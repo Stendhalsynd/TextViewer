@@ -96,18 +96,11 @@ class TextViewerViewModel(
                         return@onSuccess
                     }
 
-                    val restoreRatio = preferredPage?.let { preferred ->
-                        if (
-                            preferred >= 0 &&
-                            previousPageCount != null &&
-                            previousPageCount > 0 &&
-                            (previousPageSize == null || previousPageSize > 0)
-                        ) {
-                            (preferred + 0.5f) / previousPageCount.toFloat()
-                        } else {
-                            null
-                        }
-                    }
+                    val restoreRatio = ResumeProgressCalculator.computeRestoreRatio(
+                        preferredPage = preferredPage,
+                        previousPageCount = previousPageCount,
+                        previousPageSize = previousPageSize,
+                    )
 
                     _state.update {
                         it.copy(
@@ -216,7 +209,10 @@ class TextViewerViewModel(
         val current = _state.value
         val safeTotalPages = estimatedTotalPages.coerceAtLeast(1)
         val restoredPage = current.pendingRestoreRatio?.let { ratio ->
-            ((safeTotalPages - 1) * ratio).toInt().coerceIn(0, safeTotalPages - 1)
+            ResumeProgressCalculator.resolvePageFromRatio(
+                ratio = ratio,
+                totalPages = safeTotalPages,
+            )
         }
         val nextPage = PaginationUtil.clampPage(restoredPage ?: current.currentPage, safeTotalPages)
         val shouldClearPendingRatio = current.pendingRestoreRatio != null &&
