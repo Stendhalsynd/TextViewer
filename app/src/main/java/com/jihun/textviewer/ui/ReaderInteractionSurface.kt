@@ -3,11 +3,6 @@ package com.jihun.textviewer.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -16,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,8 +28,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.graphicsLayer
@@ -52,22 +50,27 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import com.jihun.textviewer.domain.model.TextPageRange
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
 import kotlinx.coroutines.delay
+
+private const val SIDE_GESTURE_WIDTH_DP = 64
+private const val MIN_GESTURE_TARGET_SIZE_DP = 44
+private const val SIZE_BUCKET_PX = 8
 
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
@@ -85,6 +88,7 @@ fun ReaderInteractionSurface(
     val totalPages = state.totalPages
     val hasValidTotalPages = totalPages > 0
     val pageNumber = (state.currentPage + 1).coerceAtLeast(1)
+    val safeTotalPages = if (hasValidTotalPages) totalPages else 0
 
     var jumpPageText by remember { mutableStateOf(TextFieldValue(pageNumber.toString())) }
     var showJumpPanel by remember { mutableStateOf(false) }
@@ -109,10 +113,15 @@ fun ReaderInteractionSurface(
     }
 
     val jumpPage = jumpPageText.text.toIntOrNull()
-    val jumpEnabled = state.currentDocument != null && hasValidTotalPages && jumpPage != null && jumpPage in 1..totalPages
+    val jumpEnabled =
+        state.currentDocument != null &&
+            hasValidTotalPages &&
+            jumpPage != null &&
+            jumpPage in 1..totalPages
+
     val jumpPageFocus = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
-    val sideGestureWidth = 64.dp
+    val sideGestureWidth = SIDE_GESTURE_WIDTH_DP.dp
 
     val displayedText = when {
         state.currentDocument == null -> "TXT 파일을 열면 이 영역에서 읽을 수 있습니다."
@@ -120,17 +129,22 @@ fun ReaderInteractionSurface(
         else -> "페이지 레이아웃을 계산 중입니다..."
     }
 
+    val stableContentWidthPx = ((contentWidthPx / SIZE_BUCKET_PX).toInt() * SIZE_BUCKET_PX)
+        .coerceAtLeast(1)
+    val stableContentHeightPx = ((contentHeightPx / SIZE_BUCKET_PX).toInt() * SIZE_BUCKET_PX)
+        .coerceAtLeast(1)
+
     LaunchedEffect(
         state.currentDocument?.uri,
         state.currentDocument?.content,
-        contentWidthPx,
-        contentHeightPx,
+        stableContentWidthPx,
+        stableContentHeightPx,
         textStyle,
         textMeasurer,
     ) {
         val document = state.currentDocument ?: return@LaunchedEffect
-        val widthPx = contentWidthPx.toInt()
-        val heightPx = contentHeightPx.toInt()
+        val widthPx = stableContentWidthPx
+        val heightPx = stableContentHeightPx
         if (widthPx <= 0 || heightPx <= 0 || document.content.isEmpty()) return@LaunchedEffect
 
         // Debounce repeated size/layout updates and avoid expensive repeated recalculation.
@@ -235,84 +249,77 @@ fun ReaderInteractionSurface(
                 }
             }
 
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showJumpPanel && state.currentDocument != null,
-                enter = fadeIn() + scaleIn(initialScale = 0.96f),
-                exit = fadeOut() + scaleOut(targetScale = 0.96f),
-                modifier = Modifier.matchParentSize(),
-            ) {
-                if (showJumpPanel && state.currentDocument != null) {
-                    Box(
+            if (showJumpPanel && state.currentDocument != null) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .zIndex(20f)
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f)),
+                ) {
+                    Card(
                         modifier = Modifier
-                            .matchParentSize()
-                            .zIndex(20f)
-                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f)),
+                            .align(Alignment.TopCenter)
+                            .padding(top = 52.dp)
+                            .width(300.dp)
+                            .zIndex(30f),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
                     ) {
-                        Card(
+                        Column(
                             modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = 52.dp)
-                                .width(300.dp)
-                                .zIndex(30f),
-                            shape = RoundedCornerShape(18.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = "페이지 이동",
-                                        style = MaterialTheme.typography.titleSmall,
-                                    )
-                                    TextButton(onClick = { showJumpPanel = false }) {
-                                        Text("닫기")
-                                    }
+                                Text(
+                                    text = "페이지 이동",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                TextButton(onClick = { showJumpPanel = false }) {
+                                    Text("닫기")
                                 }
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                            }
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                OutlinedTextField(
+                                    value = jumpPageText,
+                                    onValueChange = { value ->
+                                        val digits = value.text.filter { it.isDigit() }.take(5)
+                                        val selection = value.selection.let { textRange ->
+                                            TextRange(
+                                                textRange.start.coerceIn(0, digits.length),
+                                                textRange.end.coerceIn(0, digits.length),
+                                            )
+                                        }
+                                        jumpPageText = value.copy(text = digits, selection = selection)
+                                    },
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Number,
+                                        imeAction = ImeAction.Done,
+                                    ),
+                                    keyboardActions = KeyboardActions(onDone = { jumpToPage() }),
+                                    singleLine = true,
+                                    label = { Text("이동할 페이지") },
+                                    modifier = Modifier
+                                        .width(126.dp)
+                                        .focusRequester(jumpPageFocus),
+                                )
+                                Text(
+                                    text = "/ $totalPages",
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                Button(
+                                    onClick = jumpToPage,
+                                    enabled = jumpEnabled,
                                 ) {
-                                    OutlinedTextField(
-                                        value = jumpPageText,
-                                        onValueChange = { value ->
-                                            val digits = value.text.filter { it.isDigit() }.take(5)
-                                            val selection = value.selection.let { textRange ->
-                                                TextRange(
-                                                    textRange.start.coerceIn(0, digits.length),
-                                                    textRange.end.coerceIn(0, digits.length),
-                                                )
-                                            }
-                                            jumpPageText = value.copy(text = digits, selection = selection)
-                                        },
-                                        keyboardOptions = KeyboardOptions(
-                                            keyboardType = KeyboardType.Number,
-                                            imeAction = ImeAction.Done,
-                                        ),
-                                        keyboardActions = KeyboardActions(onDone = { jumpToPage() }),
-                                        singleLine = true,
-                                        label = { Text("이동할 페이지") },
-                                        modifier = Modifier
-                                            .width(126.dp)
-                                            .focusRequester(jumpPageFocus),
-                                    )
-                                    Text(
-                                        text = "/ $totalPages",
-                                        style = MaterialTheme.typography.labelLarge,
-                                    )
-                                    Button(
-                                        onClick = jumpToPage,
-                                        enabled = jumpEnabled,
-                                    ) {
-                                        Text("이동")
-                                    }
+                                    Text("이동")
                                 }
                             }
                         }
@@ -326,19 +333,26 @@ fun ReaderInteractionSurface(
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
                 ) {
-                    Text(
-                            text = if (hasValidTotalPages) "$pageNumber / $totalPages" else "계산 중",
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 8.dp, end = 12.dp)
-                                .sizeIn(minHeight = 40.dp, minWidth = 72.dp)
-                                .zIndex(25f)
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.001f))
-                                .clickable { onToggleTheme() }
-                                .semantics { this.contentDescription = "테마 전환" },
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 8.dp, end = 12.dp)
+                            .zIndex(30f)
+                            .sizeIn(minHeight = MIN_GESTURE_TARGET_SIZE_DP.dp, minWidth = 72.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onToggleTheme() }
+                            .semantics { contentDescription = "테마 전환" }
+                            .testTag("theme-toggle-button"),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.12f),
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Text(
+                            text = if (hasValidTotalPages) "$pageNumber / $safeTotalPages" else "계산 중",
                             style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 10.dp),
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.66f),
                         )
+                    }
 
                     Box(
                         modifier = Modifier
@@ -371,35 +385,44 @@ fun ReaderInteractionSurface(
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
-                                .width(sideGestureWidth)
-                                .pointerInput(onPreviousPage, containerHeightPx) {
-                                    detectTapGestures { offset ->
-                                        if (offset.y >= (containerHeightPx * 0.5f)) {
-                                            onPreviousPage()
+                                .width(sideGestureWidth),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxHeight(),
+                            ) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .pointerInput(onPreviousPage) {
+                                            detectTapGestures {
+                                                onPreviousPage()
+                                            }
                                         }
-                                    }
-                                }
-                                .pointerInput(activity, containerHeightPx) {
-                                    detectVerticalDragGestures(
-                                        onVerticalDrag = { _, dragAmount ->
-                                            brightnessLevel = adjustBrightness(
-                                                activity = activity,
-                                                current = brightnessLevel,
-                                                dragAmount = dragAmount,
-                                                heightPx = containerHeightPx,
+                                        .pointerInput(activity) {
+                                            detectVerticalDragGestures(
+                                                onVerticalDrag = { _, dragAmount ->
+                                                    brightnessLevel = adjustBrightness(
+                                                        activity = activity,
+                                                        current = brightnessLevel,
+                                                        dragAmount = dragAmount,
+                                                        heightPx = containerHeightPx,
+                                                    )
+                                                },
                                             )
                                         },
+                                ) {
+                                    Text(
+                                        text = "밝기",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .graphicsLayer { rotationZ = -90f },
                                     )
-                                },
-                        ) {
-                            Text(
-                                text = "밝기",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .graphicsLayer { rotationZ = -90f },
-                            )
+                                }
+                            }
                         }
 
                         Box(
@@ -411,35 +434,44 @@ fun ReaderInteractionSurface(
                         Box(
                             modifier = Modifier
                                 .fillMaxHeight()
-                                .width(sideGestureWidth)
-                                .pointerInput(onNextPage, containerHeightPx) {
-                                    detectTapGestures { offset ->
-                                        if (offset.y >= (containerHeightPx * 0.5f)) {
-                                            onNextPage()
+                                .width(sideGestureWidth),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxHeight(),
+                            ) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth()
+                                        .pointerInput(onNextPage) {
+                                            detectTapGestures {
+                                                onNextPage()
+                                            }
                                         }
-                                    }
-                                }
-                                .pointerInput(activity, containerHeightPx) {
-                                    detectVerticalDragGestures(
-                                        onVerticalDrag = { _, dragAmount ->
-                                            brightnessLevel = adjustBrightness(
-                                                activity = activity,
-                                                current = brightnessLevel,
-                                                dragAmount = dragAmount,
-                                                heightPx = containerHeightPx,
+                                        .pointerInput(activity) {
+                                            detectVerticalDragGestures(
+                                                onVerticalDrag = { _, dragAmount ->
+                                                    brightnessLevel = adjustBrightness(
+                                                        activity = activity,
+                                                        current = brightnessLevel,
+                                                        dragAmount = dragAmount,
+                                                        heightPx = containerHeightPx,
+                                                    )
+                                                },
                                             )
                                         },
+                                ) {
+                                    Text(
+                                        text = "밝기",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .graphicsLayer { rotationZ = 90f },
                                     )
-                                },
-                        ) {
-                            Text(
-                                text = "밝기",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0f),
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .graphicsLayer { rotationZ = 90f },
-                            )
+                                }
+                            }
                         }
                     }
                 }

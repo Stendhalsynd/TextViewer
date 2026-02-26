@@ -209,23 +209,16 @@ class TextViewerViewModel(
 
     private fun movePage(delta: Int) {
         val current = _state.value
-        val document = current.currentDocument ?: return
+        if (current.currentDocument == null) return
         val ranges = current.pageRanges
         if (ranges.isEmpty() || delta == 0) return
 
-        val currentPage = current.currentPage.coerceIn(0, ranges.size - 1)
-        val currentRange = ranges[currentPage]
-        val anchorOffset = if (delta > 0) {
-            currentRange.endOffset.coerceIn(0, document.content.length)
-        } else {
-            (currentRange.startOffset - 1).coerceIn(0, document.content.length)
-        }
+        if (ranges.isEmpty()) return
 
-        val targetPage = pageIndexForOffset(
-            ranges = ranges,
-            offset = anchorOffset,
-            preferNextOnBoundary = delta > 0,
-        )
+        val currentPage = current.currentPage.coerceIn(0, ranges.size - 1)
+        val targetPage = (currentPage + delta).coerceIn(0, ranges.lastIndex)
+        if (targetPage == currentPage) return
+
         setPage(targetPage)
     }
 

@@ -234,4 +234,21 @@ private fun normalizePageRanges(
     }
 
     return normalized
+        .asSequence()
+        .fold(mutableListOf<TextPageRange>()) { merged, candidate ->
+            if (merged.isEmpty()) {
+                merged += candidate
+            } else {
+                val last = merged.last()
+                if (last.endOffset == candidate.startOffset || candidate.startOffset <= last.endOffset) {
+                    merged[merged.lastIndex] = TextPageRange(
+                        startOffset = minOf(last.startOffset, candidate.startOffset),
+                        endOffset = max(last.endOffset, candidate.endOffset),
+                    )
+                } else {
+                    merged += candidate
+                }
+            }
+            merged
+        }
 }
