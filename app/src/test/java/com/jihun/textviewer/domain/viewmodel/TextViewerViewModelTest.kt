@@ -178,6 +178,58 @@ class TextViewerViewModelTest {
         assertEquals(content, backward.toString())
     }
 
+    @Test
+    fun nextAndPreviousPage_followStrictPageIndices_whenRangesAreUnorderedAndGappy() = runTest {
+        val content = "0123456789".repeat(200)
+        val document = createDocument(content = content, uri = "content://doc/indexed.txt")
+        val textFileRepository = FakeTextFileRepository { Result.success(document) }
+        val historyRepository = FakeReadingHistoryRepository()
+        val viewModel = TextViewerViewModel(textFileRepository, historyRepository)
+
+        val ranges = listOf(
+            TextPageRange(startOffset = 90, endOffset = 120),
+            TextPageRange(startOffset = 0, endOffset = 34),
+            TextPageRange(startOffset = 34, endOffset = 40),
+            TextPageRange(startOffset = 56, endOffset = 90),
+            TextPageRange(startOffset = 40, endOffset = 56),
+            TextPageRange(startOffset = 180, endOffset = 200),
+            TextPageRange(startOffset = 160, endOffset = 180),
+            TextPageRange(startOffset = 120, endOffset = 160),
+        )
+
+        viewModel.onAction(TextViewerAction.OpenFile(Uri.Builder().scheme("content").authority("doc").appendPath("indexed.txt").build()))
+        advanceUntilIdle()
+        viewModel.onAction(TextViewerAction.SetPageRanges(documentUri = document.uri, ranges = ranges))
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        val totalPages = state.totalPages
+        assertTrue(totalPages > 1)
+
+        val forwardIndices = mutableListOf<Int>()
+        repeat(totalPages) { index ->
+            forwardIndices.add(viewModel.state.value.currentPage)
+            if (index < totalPages - 1) {
+                viewModel.onAction(TextViewerAction.NextPage)
+                advanceUntilIdle()
+            }
+        }
+        assertEquals((0 until totalPages).toList(), forwardIndices)
+
+        viewModel.onAction(TextViewerAction.GoToPage(totalPages - 1))
+        advanceUntilIdle()
+
+        val backwardIndices = mutableListOf<Int>()
+        repeat(totalPages) { index ->
+            backwardIndices.add(viewModel.state.value.currentPage)
+            if (index < totalPages - 1) {
+                viewModel.onAction(TextViewerAction.PreviousPage)
+                advanceUntilIdle()
+            }
+        }
+        assertEquals((0 until totalPages).toList().asReversed(), backwardIndices)
+    }
+
     private fun createDocument(content: String, uri: String): TextDocument {
         return TextDocument(
             uri = uri,
