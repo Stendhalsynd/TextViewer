@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.0.18 (2026-02-26)
+- Add resilience to large-document page calculation with size-based safe fallback from exact layout to estimate.
+- Keep page range continuity coverage by always validating generated ranges through normalizer.
+- Improve reader stability during file open/resume by preventing page layout exceptions from crashing UI.
+- Bump app version to `1.0.18` / `versionCode 18`.
+
 ## 1.0.17 (2026-02-26)
 - Add regression coverage for page navigation consistency when page ranges are unordered/gappy.
 - Enforce strict page-index based movement under repeated page transitions.

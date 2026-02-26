@@ -11,6 +11,7 @@ import kotlin.math.max
 
 private const val PAGE_RANGE_CACHE_MAX_ENTRIES = 8
 private const val MINIMUM_ESTIMATE_CHARS_PER_PAGE = 220
+private const val MAX_EXACT_CALCULATION_CHARS = 300_000
 
 private data class PageRangeCacheKey(
     val textHash: Int,
@@ -58,15 +59,38 @@ internal fun calculatePageRanges(
     )
     PageRangeCache.get(key)?.let { return it }
 
-    val ranges = calculatePageRangesExact(
-        text = text,
-        textStyle = textStyle,
-        textMeasurer = textMeasurer,
-        availableWidthPx = key.widthPx,
-        availableHeightPx = key.heightPx,
+    val ranges = if (text.length <= MAX_EXACT_CALCULATION_CHARS) {
+        runCatching {
+            calculatePageRangesExact(
+                text = text,
+                textStyle = textStyle,
+                textMeasurer = textMeasurer,
+                availableWidthPx = key.widthPx,
+                availableHeightPx = key.heightPx,
+            )
+        }.getOrElse { estimatePageRanges(
+            text = text,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            availableWidthPx = key.widthPx,
+            availableHeightPx = key.heightPx,
+        ) }
+    } else {
+        estimatePageRanges(
+            text = text,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            availableWidthPx = key.widthPx,
+            availableHeightPx = key.heightPx,
+        )
+    }
+
+    val normalizedRanges = normalizePageRanges(
+        ranges = ranges,
+        contentLength = text.length,
     )
-    PageRangeCache.put(key, ranges)
-    return ranges
+    PageRangeCache.put(key, normalizedRanges)
+    return normalizedRanges
 }
 
 internal fun estimatePageRanges(

@@ -63,6 +63,22 @@ class PageRangeCalculatorTest {
         assertTrue(wideRanges.size <= singleLineRanges.size)
     }
 
+    @Test
+    fun calculatePageRanges_fallsBackForVeryLargeContent_withoutLoss() {
+        val content = ("매우 긴 텍스트로 정밀 계산 폴백 동작을 검증합니다.\n".repeat(20_000))
+        assertTrue(content.length > 300_000)
+
+        val ranges = calculatePageRanges(
+            text = content,
+            textStyle = TextViewerTypography.bodyLarge,
+            textMeasurer = createTestMeasurer(),
+            availableWidthPx = 720,
+            availableHeightPx = 1440,
+        )
+
+        assertPageRangesAreContinuousAndLossless(content, ranges)
+    }
+
     private fun assertPageRangesAreContinuousAndLossless(
         content: String,
         ranges: List<TextPageRange>,

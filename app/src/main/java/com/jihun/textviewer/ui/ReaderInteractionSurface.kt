@@ -3,6 +3,7 @@ package com.jihun.textviewer.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -66,11 +67,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import com.jihun.textviewer.domain.model.TextPageRange
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 private const val SIDE_GESTURE_WIDTH_DP = 64
 private const val MIN_GESTURE_TARGET_SIZE_DP = 44
 private const val SIZE_BUCKET_PX = 8
+private const val PAGE_LAYOUT_TIMEOUT_MS = 1_500L
 
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
@@ -162,13 +169,28 @@ fun ReaderInteractionSurface(
             onPageRangesUpdated(document.uri, estimate)
         }
 
-        val ranges = calculatePageRanges(
-            text = document.content,
-            textStyle = textStyle,
-            textMeasurer = textMeasurer,
-            availableWidthPx = widthPx,
-            availableHeightPx = heightPx,
-        )
+        val ranges = runCatching {
+            withTimeout(PAGE_LAYOUT_TIMEOUT_MS) {
+                withContext(Dispatchers.Default) {
+                    calculatePageRanges(
+                        text = document.content,
+                        textStyle = textStyle,
+                        textMeasurer = textMeasurer,
+                        availableWidthPx = widthPx,
+                        availableHeightPx = heightPx,
+                    )
+                }
+            }
+        }.getOrElse { throwable ->
+            if (throwable is CancellationException) {
+                throw throwable
+            }
+            if (throwable !is TimeoutCancellationException) {
+                Log.w("ReaderInteractionSurface", "Fallback to estimate page ranges", throwable)
+            }
+            estimate
+        }
+
         if (ranges != lastComputedRanges) {
             lastComputedRanges = ranges
             onPageRangesUpdated(document.uri, ranges)
