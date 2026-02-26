@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 1.0.17 (2026-02-26)
+- Add regression coverage for page navigation consistency when page ranges are unordered/gappy.
+- Enforce strict page-index based movement under repeated page transitions.
+- Keep page range continuity behavior stabilized from previous fix set.
+- Bump app version to `1.0.17` / `versionCode 17`.
+
 ## 1.0.16 (2026-02-26)
 - Fix page range continuity to prevent lost or duplicated lines during navigation.
 - Refactor page navigation to advance by page index, preventing multi-page jumps after repeated moves.
