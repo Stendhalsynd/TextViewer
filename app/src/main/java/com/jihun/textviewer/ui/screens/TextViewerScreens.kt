@@ -3,7 +3,6 @@ package com.jihun.textviewer.ui.screens
 import android.text.format.DateUtils
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,9 +12,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,11 +24,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jihun.textviewer.BuildConfig
 import com.jihun.textviewer.domain.model.ReadingHistory
+import com.jihun.textviewer.domain.model.TextPageRange
 import com.jihun.textviewer.domain.viewmodel.TextViewerState
 import com.jihun.textviewer.ui.ReaderInteractionSurface
 
@@ -43,7 +43,7 @@ fun TextViewerHomeScreen(
     onNextPage: () -> Unit,
     onGoToPage: (Int) -> Unit,
     onToggleTheme: () -> Unit,
-    onPageRangesUpdated: (String, List<com.jihun.textviewer.domain.model.TextPageRange>) -> Unit,
+    onPageRangesUpdated: (String, List<TextPageRange>) -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (state.currentDocument != null) {
@@ -59,10 +59,12 @@ fun TextViewerHomeScreen(
                     .padding(horizontal = 10.dp, vertical = 8.dp),
             )
         } else {
-            EmptyReaderHome(
+            SlackHomePrompt(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp),
+                onOpenFileClick = onOpenFileClick,
+                onResumeClick = onResumeClick,
             )
         }
 
@@ -71,7 +73,7 @@ fun TextViewerHomeScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter)
-                    .padding(top = 10.dp, start = 12.dp, end = 12.dp),
+                    .padding(top = 12.dp, start = 12.dp, end = 12.dp),
                 shape = RoundedCornerShape(20.dp),
                 color = MaterialTheme.colorScheme.errorContainer,
                 tonalElevation = 4.dp,
@@ -85,43 +87,24 @@ fun TextViewerHomeScreen(
             }
         }
 
-        if (state.currentDocument == null) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 10.dp)
-                    .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                GlassActionChip(
-                    text = "TXT 열기",
-                    onClick = onOpenFileClick,
-                    modifier = Modifier.weight(1f),
-                )
-                GlassActionChip(
-                    text = "이어읽기",
-                    onClick = onResumeClick,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-
         if (state.isLoading && state.errorMessage == null) {
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .padding(18.dp),
                 shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
                 tonalElevation = 6.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
                     Text(
                         text = "텍스트 파일을 불러오는 중...",
                         style = MaterialTheme.typography.bodyLarge,
@@ -133,33 +116,74 @@ fun TextViewerHomeScreen(
 }
 
 @Composable
-private fun EmptyReaderHome(
-    modifier: Modifier = Modifier,
+private fun SlackHomePrompt(
+    modifier: Modifier,
+    onOpenFileClick: () -> Unit,
+    onResumeClick: () -> Unit,
 ) {
-    Box(modifier = modifier) {
-        Card(
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.background,
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    ),
+                ),
+            ),
+    ) {
+        Surface(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.Center)
-                .padding(horizontal = 10.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-            ),
+                .padding(horizontal = 6.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(26.dp),
+            shadowElevation = 4.dp,
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    modifier = Modifier.padding(bottom = 2.dp),
+                ) {
+                    Text(
+                        text = "TXT",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
                 Text(
-                    text = "텍스트 파일을 선택해 읽기를 시작하세요",
+                    text = "읽기 시작하기",
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "TXT 열기 또는 이어읽기를 누르면 읽기 화면으로 진입합니다.",
+                    text = "TXT 파일 열기 또는 이어읽기 버튼으로 텍스트 세션을 시작하세요.",
                     style = MaterialTheme.typography.bodyLarge,
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    GlassActionChip(
+                        text = "TXT 열기",
+                        onClick = onOpenFileClick,
+                        modifier = Modifier.weight(1f),
+                    )
+                    GlassActionChip(
+                        text = "이어읽기",
+                        onClick = onResumeClick,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -174,32 +198,38 @@ fun TextViewerHistoryScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        item {
+            Text(
+                text = "이력",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+            )
+        }
         if (history.isEmpty()) {
             item {
                 Surface(
                     shape = RoundedCornerShape(24.dp),
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                    tonalElevation = 4.dp,
+                    tonalElevation = 3.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
                 ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
+                    Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             text = "아직 읽기 기록이 없습니다",
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            text = "TXT 파일을 열면 자동으로 기록됩니다.",
+                            text = "TXT 파일을 열면 최근 기록이 자동 저장됩니다.",
                             style = MaterialTheme.typography.bodyLarge,
-                            modifier = Modifier.padding(top = 8.dp),
                         )
                         OutlinedButton(
                             onClick = onOpenNewFile,
-                            modifier = Modifier.padding(top = 14.dp),
+                            modifier = Modifier.padding(top = 6.dp),
                         ) {
-                            Text("TXT 열기")
+                            Text("새 파일 열기")
                         }
                     }
                 }
@@ -223,35 +253,33 @@ fun TextViewerSettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Surface(
             shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-            tonalElevation = 4.dp,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
+            tonalElevation = 3.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "읽기 테마",
+                    text = "테마",
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(
-                    text = "눈의 피로를 줄이기 위해 낮/밤 대비를 전환합니다.",
+                    text = "밝기/어두운 모드를 전환해 눈 피로를 줄입니다.",
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Text(
-                    text = "현재 버전: v${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 8.dp),
                 )
                 Button(
                     onClick = onToggleTheme,
-                    modifier = Modifier.padding(top = 14.dp),
+                    modifier = Modifier.padding(top = 6.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ),
                 ) {
-                    Text(if (darkTheme) "라이트 모드 사용" else "다크 모드 사용")
+                    Text(if (darkTheme) "라이트 모드 전환" else "다크 모드 전환")
                 }
             }
         }
@@ -259,23 +287,20 @@ fun TextViewerSettingsScreen(
         Surface(
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-            tonalElevation = 4.dp,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
         ) {
-            Column(modifier = Modifier.padding(18.dp)) {
+            Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "릴리즈 노트",
+                    text = "앱 정보",
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "v${BuildConfig.VERSION_NAME}: 페이지 카운터 표시 및 화면 상단 테마 토글 추가",
+                    text = "버전: v${BuildConfig.VERSION_NAME}",
                     style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 8.dp),
                 )
                 Text(
-                    text = "v1.0.0: 텍스트 파일 읽기, 기록 저장, 기본 제스처 제어",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(top = 4.dp),
+                    text = "릴리즈 노트는 홈 화면에서 확인할 수 있습니다.",
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
@@ -299,10 +324,9 @@ private fun HistoryItem(
     Surface(
         shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
-        tonalElevation = 3.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.11f)),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 text = entry.fileName ?: entry.fileUri,
                 style = MaterialTheme.typography.titleMedium,
@@ -312,16 +336,15 @@ private fun HistoryItem(
             Text(
                 text = progressText,
                 style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(top = 8.dp),
             )
             Text(
                 text = "최근 열람: $updatedText",
                 style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.padding(top = 4.dp),
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.84f),
             )
             Button(
                 onClick = onContinueReading,
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(top = 4.dp),
             ) {
                 Text("이어서 읽기")
             }
@@ -335,16 +358,12 @@ private fun GlassActionChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(16.dp)
     Button(
         onClick = onClick,
         modifier = modifier
-            .border(
-                BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
-                shape,
-            )
             .background(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
                 shape = shape,
             ),
         shape = shape,

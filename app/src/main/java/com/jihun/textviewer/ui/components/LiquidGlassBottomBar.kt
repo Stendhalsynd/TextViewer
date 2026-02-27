@@ -1,7 +1,7 @@
 package com.jihun.textviewer.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -43,48 +42,35 @@ fun LiquidGlassBottomBar(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.74f),
-            shape = RoundedCornerShape(28.dp),
-            tonalElevation = 4.dp,
-            shadowElevation = 14.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-            ),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+            shape = RoundedCornerShape(30.dp),
+            tonalElevation = 8.dp,
+            shadowElevation = 16.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)),
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 destinations.forEach { destination ->
                     val selected = currentRoute == destination.route
-                    val shape = RoundedCornerShape(20.dp)
                     val interactionSource = remember(destination.route) { MutableInteractionSource() }
-                    val selectedContainer = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    val selectedBorder = MaterialTheme.colorScheme.primary.copy(alpha = 0.26f)
+                    val container = if (selected) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                    } else {
+                        Color.Transparent
+                    }
                     val textColor = if (selected) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.86f)
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.78f)
                     }
 
                     Box(
                         modifier = Modifier
-                            .semantics {
-                                contentDescription = destination.label
-                            }
-                            .border(
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = if (selected) selectedBorder else Color.Transparent,
-                                ),
-                                shape = shape,
-                            )
-                            .background(
-                                color = if (selected) selectedContainer else Color.Transparent,
-                                shape = shape,
-                            )
-                            .clip(shape)
+                            .semantics { contentDescription = destination.label }
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(container, RoundedCornerShape(18.dp))
                             .clickable(
                                 interactionSource = interactionSource,
                                 indication = null,

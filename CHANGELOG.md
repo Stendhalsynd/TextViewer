@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.0.20 (2026-02-27)
+- Replace the page range calculator with a two-stage estimate/refine flow and range-bisection fitting for large text stability.
+- Rework core reader screens and bottom bar into a Slack-inspired glassmorphism theme.
+- Bump app version to `1.0.20` / `versionCode 20`.
+
 ## 1.0.19 (2026-02-27)
 - Add safer layout-init flow to skip page calculation until the reading viewport is measured.
 - Handle page layout and content extraction errors during open/resume with graceful fallback.

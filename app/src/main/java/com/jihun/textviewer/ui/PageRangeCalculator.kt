@@ -6,12 +6,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import com.jihun.textviewer.domain.model.TextPageRange
-import java.util.LinkedHashMap
 import kotlin.math.max
+import java.util.LinkedHashMap
 
-private const val PAGE_RANGE_CACHE_MAX_ENTRIES = 8
+private const val PAGE_RANGE_CACHE_MAX_ENTRIES = 12
 private const val MINIMUM_ESTIMATE_CHARS_PER_PAGE = 220
 private const val MAX_EXACT_CALCULATION_CHARS = 300_000
+private const val EXACT_CALCULATION_CHAR_GROWTH_BASE = 256
+private const val PAGE_LAYOUT_BUCKET_PX = 8
 
 private data class PageRangeCacheKey(
     val textHash: Int,
@@ -22,11 +24,14 @@ private data class PageRangeCacheKey(
 )
 
 private object PageRangeCache {
-    private val cache: LinkedHashMap<PageRangeCacheKey, List<TextPageRange>> = object : LinkedHashMap<PageRangeCacheKey, List<TextPageRange>>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<PageRangeCacheKey, List<TextPageRange>>?): Boolean {
-            return size > PAGE_RANGE_CACHE_MAX_ENTRIES
+    private val cache: LinkedHashMap<PageRangeCacheKey, List<TextPageRange>> =
+        object : LinkedHashMap<PageRangeCacheKey, List<TextPageRange>>(16, 0.75f, true) {
+            override fun removeEldestEntry(
+                eldest: MutableMap.MutableEntry<PageRangeCacheKey, List<TextPageRange>>?,
+            ): Boolean {
+                return size > PAGE_RANGE_CACHE_MAX_ENTRIES
+            }
         }
-    }
 
     fun get(key: PageRangeCacheKey): List<TextPageRange>? = synchronized(cache) {
         cache[key]
@@ -45,44 +50,49 @@ internal fun calculatePageRanges(
     textMeasurer: TextMeasurer,
     availableWidthPx: Int,
     availableHeightPx: Int,
+    skipEstimateStage: Boolean = false,
+    estimatedRanges: List<TextPageRange>? = null,
 ): List<TextPageRange> {
     if (text.isEmpty()) {
         return listOf(TextPageRange(0, 0))
     }
 
+    val width = availableWidthPx.coerceAtLeast(1)
+    val height = availableHeightPx.coerceAtLeast(1)
+    val bucketedWidth = (width / PAGE_LAYOUT_BUCKET_PX).coerceAtLeast(1) * PAGE_LAYOUT_BUCKET_PX
+    val bucketedHeight = (height / PAGE_LAYOUT_BUCKET_PX).coerceAtLeast(1) * PAGE_LAYOUT_BUCKET_PX
     val key = PageRangeCacheKey(
         textHash = text.hashCode(),
         contentLength = text.length,
-        widthPx = availableWidthPx.coerceAtLeast(1),
-        heightPx = availableHeightPx.coerceAtLeast(1),
+        widthPx = bucketedWidth,
+        heightPx = bucketedHeight,
         textStyleSignature = textStyleSignature(textStyle),
     )
     PageRangeCache.get(key)?.let { return it }
 
-    val ranges = if (text.length <= MAX_EXACT_CALCULATION_CHARS) {
+    val estimate = estimatedRanges ?: runCatching {
+        estimatePageRanges(
+            text = text,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            availableWidthPx = bucketedWidth,
+            availableHeightPx = bucketedHeight,
+        )
+    }.getOrElse { listOf(TextPageRange(0, text.length)) }
+
+    val ranges = if (text.length > MAX_EXACT_CALCULATION_CHARS && !skipEstimateStage) {
+        estimate
+    } else {
         runCatching {
             calculatePageRangesExact(
                 text = text,
                 textStyle = textStyle,
                 textMeasurer = textMeasurer,
-                availableWidthPx = key.widthPx,
-                availableHeightPx = key.heightPx,
+                availableWidthPx = bucketedWidth,
+                availableHeightPx = bucketedHeight,
+                estimatedRanges = estimate,
             )
-        }.getOrElse { estimatePageRanges(
-            text = text,
-            textStyle = textStyle,
-            textMeasurer = textMeasurer,
-            availableWidthPx = key.widthPx,
-            availableHeightPx = key.heightPx,
-        ) }
-    } else {
-        estimatePageRanges(
-            text = text,
-            textStyle = textStyle,
-            textMeasurer = textMeasurer,
-            availableWidthPx = key.widthPx,
-            availableHeightPx = key.heightPx,
-        )
+        }.getOrElse { estimate }
     }
 
     val normalizedRanges = normalizePageRanges(
@@ -108,22 +118,15 @@ internal fun estimatePageRanges(
         return listOf(TextPageRange(0, text.length))
     }
 
-    val width = availableWidthPx
-    val height = availableHeightPx
-
-    val sample = runCatching {
-        textMeasurer.measure(
-            text = AnnotatedString("가나다라마바사"),
-            style = textStyle,
-            constraints = Constraints(maxWidth = width),
-            softWrap = false,
-            overflow = TextOverflow.Clip,
-        )
-    }.getOrElse { return listOf(TextPageRange(0, text.length)) }
-    val averageCharWidth = sample.size.width.toFloat().coerceAtLeast(1f) / 7f
-    val approximateLinesPerPage = (height / sample.size.height.coerceAtLeast(1)).coerceAtLeast(1)
-    val approximateCharsPerLine = (width / averageCharWidth).toInt().coerceAtLeast(8)
-    val approximateCharsPerPage = (approximateCharsPerLine * approximateLinesPerPage).coerceAtLeast(MINIMUM_ESTIMATE_CHARS_PER_PAGE)
+    val width = availableWidthPx.coerceAtLeast(1)
+    val height = availableHeightPx.coerceAtLeast(1)
+    val approximateCharsPerPage = estimateCharsPerPage(
+        text = text,
+        textStyle = textStyle,
+        textMeasurer = textMeasurer,
+        availableWidthPx = width,
+        availableHeightPx = height,
+    )
 
     val ranges = mutableListOf<TextPageRange>()
     var start = 0
@@ -146,57 +149,235 @@ private fun calculatePageRangesExact(
     textMeasurer: TextMeasurer,
     availableWidthPx: Int,
     availableHeightPx: Int,
+    estimatedRanges: List<TextPageRange>?,
 ): List<TextPageRange> {
+    if (text.isEmpty()) {
+        return listOf(TextPageRange(0, 0))
+    }
+
     val width = availableWidthPx.coerceAtLeast(1)
     val height = availableHeightPx.coerceAtLeast(1)
 
-    val layout = runCatching {
-        textMeasurer.measure(
-            text = AnnotatedString(text),
-            style = textStyle,
-            constraints = Constraints(maxWidth = width),
-            softWrap = true,
-            overflow = TextOverflow.Clip,
+    val estimatedCharsPerPage = estimateCharsPerPage(
+        text = text,
+        textStyle = textStyle,
+        textMeasurer = textMeasurer,
+        availableWidthPx = width,
+        availableHeightPx = height,
+        estimatedRangesHint = estimatedRanges,
+    ).coerceAtLeast(MINIMUM_ESTIMATE_CHARS_PER_PAGE)
+
+    val ranges = mutableListOf<TextPageRange>()
+    var startOffset = 0
+
+    while (startOffset < text.length) {
+        val endOffset = resolvePageEndOffset(
+            text = text,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            startOffset = startOffset,
+            availableWidthPx = width,
+            availableHeightPx = height,
+            initialGuessChars = estimatedCharsPerPage,
         )
-    }.getOrElse { return listOf(TextPageRange(0, text.length)) }
-
-    if (layout.lineCount <= 0) {
-        return listOf(TextPageRange(0, text.length))
-    }
-
-    val rawRanges = mutableListOf<TextPageRange>()
-    var startLine = 0
-    val viewportHeight = height.toFloat()
-
-    while (startLine < layout.lineCount) {
-        val pageTop = layout.getLineTop(startLine)
-        var endLine = startLine
-
-        while (endLine + 1 < layout.lineCount) {
-            if (layout.getLineBottom(endLine + 1) - pageTop <= viewportHeight) {
-                endLine += 1
-            } else {
-                break
-            }
+        val safeEnd = endOffset.coerceIn(startOffset + 1, text.length)
+        ranges += TextPageRange(startOffset = startOffset, endOffset = safeEnd)
+        startOffset = safeEnd
+        if (safeEnd <= 0) {
+            break
         }
-
-        val startOffset = layout.getLineStart(startLine)
-        val lineEnd = layout.getLineEnd(endLine, true)
-        val clampedEnd = lineEnd.coerceIn(startOffset, text.length)
-        val endOffset = if (clampedEnd > startOffset) {
-            clampedEnd
-        } else {
-            (startOffset + 1).coerceAtMost(text.length)
-        }
-        rawRanges += TextPageRange(startOffset = startOffset, endOffset = endOffset)
-
-        startLine = endLine + 1
     }
 
     return normalizePageRanges(
-        ranges = rawRanges,
+        ranges = ranges,
         contentLength = text.length,
     )
+}
+
+private fun resolvePageEndOffset(
+    text: String,
+    textStyle: TextStyle,
+    textMeasurer: TextMeasurer,
+    startOffset: Int,
+    availableWidthPx: Int,
+    availableHeightPx: Int,
+    initialGuessChars: Int,
+): Int {
+    val contentLength = text.length
+    if (startOffset >= contentLength - 1) return contentLength
+
+    val minEnd = startOffset + 1
+    if (startOffset >= contentLength) return contentLength
+    if (!canFitRange(
+            text = text,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            startOffset = startOffset,
+            endOffset = minEnd,
+            availableWidthPx = availableWidthPx,
+            availableHeightPx = availableHeightPx,
+        )
+    ) {
+        return minEnd
+    }
+
+    var fitEnd = minEnd
+    var probeEnd = (startOffset + initialGuessChars).coerceAtMost(contentLength).coerceAtLeast(minEnd)
+
+    while (true) {
+        if (probeEnd >= contentLength) {
+            return if (canFitRange(
+                    text = text,
+                    textStyle = textStyle,
+                    textMeasurer = textMeasurer,
+                    startOffset = startOffset,
+                    endOffset = contentLength,
+                    availableWidthPx = availableWidthPx,
+                    availableHeightPx = availableHeightPx,
+                )
+            ) {
+                contentLength
+            } else {
+                contentLength - 1
+            }
+        }
+
+        val canFitProbe = canFitRange(
+            text = text,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            startOffset = startOffset,
+            endOffset = probeEnd,
+            availableWidthPx = availableWidthPx,
+            availableHeightPx = availableHeightPx,
+        )
+        if (canFitProbe) {
+            fitEnd = probeEnd
+            val growth = max((probeEnd - startOffset) / 2 + EXACT_CALCULATION_CHAR_GROWTH_BASE, EXACT_CALCULATION_CHAR_GROWTH_BASE)
+            probeEnd = (probeEnd + growth).coerceAtMost(contentLength)
+            continue
+        }
+
+        val failEnd = probeEnd
+        return binarySearchPageEnd(
+            text = text,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            startOffset = startOffset,
+            availableWidthPx = availableWidthPx,
+            availableHeightPx = availableHeightPx,
+            low = fitEnd,
+            high = failEnd,
+        )
+    }
+}
+
+private fun binarySearchPageEnd(
+    text: String,
+    textStyle: TextStyle,
+    textMeasurer: TextMeasurer,
+    startOffset: Int,
+    availableWidthPx: Int,
+    availableHeightPx: Int,
+    low: Int,
+    high: Int,
+): Int {
+    if (high <= low + 1) return low
+
+    var knownGood = low
+    var knownBad = high
+    while (knownGood + 1 < knownBad) {
+        val mid = (knownGood + knownBad) / 2 + ((knownGood + knownBad) % 2)
+        val canFit = canFitRange(
+            text = text,
+            textStyle = textStyle,
+            textMeasurer = textMeasurer,
+            startOffset = startOffset,
+            endOffset = mid,
+            availableWidthPx = availableWidthPx,
+            availableHeightPx = availableHeightPx,
+        )
+        if (canFit) {
+            knownGood = mid
+        } else {
+            knownBad = mid
+        }
+    }
+    return knownGood
+}
+
+private fun canFitRange(
+    text: String,
+    textStyle: TextStyle,
+    textMeasurer: TextMeasurer,
+    startOffset: Int,
+    endOffset: Int,
+    availableWidthPx: Int,
+    availableHeightPx: Int,
+): Boolean {
+    if (endOffset <= startOffset) return false
+    val width = availableWidthPx.coerceAtLeast(1)
+    val height = availableHeightPx.coerceAtLeast(1)
+    val candidate = text.substring(startOffset, endOffset)
+    if (candidate.isEmpty()) return false
+
+    return runCatching {
+        textMeasurer.measure(
+            text = AnnotatedString(candidate),
+            style = textStyle,
+            constraints = Constraints(
+                maxWidth = width,
+                maxHeight = height,
+            ),
+            softWrap = true,
+            overflow = TextOverflow.Clip,
+        ).size.height <= height
+    }.getOrDefault(false)
+}
+
+private fun estimateCharsPerPage(
+    text: String,
+    textStyle: TextStyle,
+    textMeasurer: TextMeasurer,
+    availableWidthPx: Int,
+    availableHeightPx: Int,
+    estimatedRangesHint: List<TextPageRange>? = null,
+): Int {
+    if (!estimatedRangesHint.isNullOrEmpty()) {
+        val hintCount = minOf(estimatedRangesHint.size, 3)
+        var hintSum = 0
+        for (index in 0 until hintCount) {
+            val range = estimatedRangesHint[index]
+            hintSum += range.endOffset - range.startOffset
+        }
+        val averageHint = if (hintCount > 0) hintSum / hintCount else 0
+        if (averageHint > 0) {
+            return averageHint
+        }
+    }
+
+    val width = availableWidthPx.coerceAtLeast(1)
+    val height = availableHeightPx.coerceAtLeast(1)
+
+    val sampleText = "가나다라마바사".take(text.length.coerceAtMost(12))
+    val sampleLayout = runCatching {
+        textMeasurer.measure(
+            text = AnnotatedString(sampleText),
+            style = textStyle,
+            constraints = Constraints(
+                maxWidth = width,
+                maxHeight = height,
+            ),
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+        )
+    }.getOrElse { return MINIMUM_ESTIMATE_CHARS_PER_PAGE }
+
+    val sampleLineHeight = sampleLayout.size.height.toFloat().coerceAtLeast(1f)
+    val estimatedLinesPerPage = (height / sampleLineHeight).coerceAtLeast(1f)
+    val averageCharWidth = sampleLayout.size.width.toFloat().coerceAtLeast(4f) / maxOf(sampleText.length, 1).toFloat()
+    val approximateCharsPerLine = (width / averageCharWidth).toInt().coerceAtLeast(8)
+    return (approximateCharsPerLine * estimatedLinesPerPage).toInt().coerceAtLeast(MINIMUM_ESTIMATE_CHARS_PER_PAGE)
 }
 
 private fun textStyleSignature(textStyle: TextStyle): Int {
