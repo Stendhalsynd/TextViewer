@@ -78,6 +78,7 @@ private const val SIDE_GESTURE_WIDTH_DP = 64
 private const val MIN_GESTURE_TARGET_SIZE_DP = 44
 private const val SIZE_BUCKET_PX = 8
 private const val PAGE_LAYOUT_TIMEOUT_MS = 1_500L
+private const val MIN_LAYOUT_DIMENSION_PX = 48
 
 @Composable
 @OptIn(ExperimentalComposeUiApi::class)
@@ -99,9 +100,9 @@ fun ReaderInteractionSurface(
 
     var jumpPageText by remember { mutableStateOf(TextFieldValue(pageNumber.toString())) }
     var showJumpPanel by remember { mutableStateOf(false) }
-    var containerHeightPx by remember { mutableFloatStateOf(1f) }
-    var contentWidthPx by remember { mutableFloatStateOf(1f) }
-    var contentHeightPx by remember { mutableFloatStateOf(1f) }
+    var containerHeightPx by remember { mutableFloatStateOf(0f) }
+    var contentWidthPx by remember { mutableFloatStateOf(0f) }
+    var contentHeightPx by remember { mutableFloatStateOf(0f) }
     var brightnessLevel by remember(activity) {
         mutableFloatStateOf(readCurrentBrightness(activity))
     }
@@ -152,18 +153,20 @@ fun ReaderInteractionSurface(
         val document = state.currentDocument ?: return@LaunchedEffect
         val widthPx = stableContentWidthPx
         val heightPx = stableContentHeightPx
-        if (widthPx <= 0 || heightPx <= 0 || document.content.isEmpty()) return@LaunchedEffect
+        if (widthPx < MIN_LAYOUT_DIMENSION_PX || heightPx < MIN_LAYOUT_DIMENSION_PX || document.content.isEmpty()) return@LaunchedEffect
 
         // Debounce repeated size/layout updates and avoid expensive repeated recalculation.
         delay(80L)
 
-        val estimate = estimatePageRanges(
-            text = document.content,
-            textStyle = textStyle,
-            textMeasurer = textMeasurer,
-            availableWidthPx = widthPx,
-            availableHeightPx = heightPx,
-        )
+        val estimate = withContext(Dispatchers.Default) {
+            estimatePageRanges(
+                text = document.content,
+                textStyle = textStyle,
+                textMeasurer = textMeasurer,
+                availableWidthPx = widthPx,
+                availableHeightPx = heightPx,
+            )
+        }
         if (estimate != lastComputedRanges) {
             lastComputedRanges = estimate
             onPageRangesUpdated(document.uri, estimate)

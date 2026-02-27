@@ -104,16 +104,22 @@ internal fun estimatePageRanges(
         return listOf(TextPageRange(0, 0))
     }
 
-    val width = availableWidthPx.coerceAtLeast(1)
-    val height = availableHeightPx.coerceAtLeast(1)
+    if (availableWidthPx <= 0 || availableHeightPx <= 0) {
+        return listOf(TextPageRange(0, text.length))
+    }
 
-    val sample = textMeasurer.measure(
-        text = AnnotatedString("가나다라마바사"),
-        style = textStyle,
-        constraints = Constraints(maxWidth = width),
-        softWrap = false,
-        overflow = TextOverflow.Clip,
-    )
+    val width = availableWidthPx
+    val height = availableHeightPx
+
+    val sample = runCatching {
+        textMeasurer.measure(
+            text = AnnotatedString("가나다라마바사"),
+            style = textStyle,
+            constraints = Constraints(maxWidth = width),
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+        )
+    }.getOrElse { return listOf(TextPageRange(0, text.length)) }
     val averageCharWidth = sample.size.width.toFloat().coerceAtLeast(1f) / 7f
     val approximateLinesPerPage = (height / sample.size.height.coerceAtLeast(1)).coerceAtLeast(1)
     val approximateCharsPerLine = (width / averageCharWidth).toInt().coerceAtLeast(8)
@@ -144,13 +150,15 @@ private fun calculatePageRangesExact(
     val width = availableWidthPx.coerceAtLeast(1)
     val height = availableHeightPx.coerceAtLeast(1)
 
-    val layout = textMeasurer.measure(
-        text = AnnotatedString(text),
-        style = textStyle,
-        constraints = Constraints(maxWidth = width),
-        softWrap = true,
-        overflow = TextOverflow.Clip,
-    )
+    val layout = runCatching {
+        textMeasurer.measure(
+            text = AnnotatedString(text),
+            style = textStyle,
+            constraints = Constraints(maxWidth = width),
+            softWrap = true,
+            overflow = TextOverflow.Clip,
+        )
+    }.getOrElse { return listOf(TextPageRange(0, text.length)) }
 
     if (layout.lineCount <= 0) {
         return listOf(TextPageRange(0, text.length))

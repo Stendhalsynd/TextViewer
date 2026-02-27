@@ -190,14 +190,21 @@ class TextViewerViewModel(
         val safeAnchorOffset = anchorOffset.coerceIn(0, document.content.length - 1)
         val page = pageIndexForOffset(normalizedRanges, safeAnchorOffset)
         val selectedRange = normalizedRanges[page]
+        val safeStart = selectedRange.startOffset.coerceIn(0, document.content.length)
+        val safeEnd = selectedRange.endOffset.coerceIn(safeStart, document.content.length)
+        val safeContent = runCatching {
+            document.content.substring(safeStart, safeEnd)
+        }.getOrElse {
+            document.content.take(safeEnd.coerceAtLeast(0))
+        }
 
         _state.update {
             it.copy(
                 currentPage = page,
-                currentOffset = selectedRange.startOffset,
+                currentOffset = safeStart,
                 pageRanges = normalizedRanges,
                 totalPages = normalizedRanges.size,
-                pageContent = document.content.substring(selectedRange.startOffset, selectedRange.endOffset),
+                pageContent = safeContent,
             )
         }
         pendingRestoreOffset = null
@@ -352,12 +359,18 @@ class TextViewerViewModel(
         if (safePage == current.currentPage) return
 
         val range = ranges[safePage]
+        val safeStart = range.startOffset.coerceIn(0, document.content.length)
+        val safeEnd = range.endOffset.coerceIn(safeStart, document.content.length)
 
         _state.update {
             it.copy(
                 currentPage = safePage,
-                currentOffset = range.startOffset,
-                pageContent = document.content.substring(range.startOffset, range.endOffset),
+                currentOffset = safeStart,
+                pageContent = runCatching {
+                    document.content.substring(safeStart, safeEnd)
+                }.getOrElse {
+                    document.content.take(safeEnd.coerceAtLeast(0))
+                },
             )
         }
         viewModelScope.launch {

@@ -1,5 +1,10 @@
 # CHANGELOG
 
+## 1.0.19 (2026-02-27)
+- Add safer layout-init flow to skip page calculation until the reading viewport is measured.
+- Handle page layout and content extraction errors during open/resume with graceful fallback.
+- Bump app version to `1.0.19` / `versionCode 19`.
+
 ## 1.0.18 (2026-02-26)
 - Add resilience to large-document page calculation with size-based safe fallback from exact layout to estimate.
 - Keep page range continuity coverage by always validating generated ranges through normalizer.
